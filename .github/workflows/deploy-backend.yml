@@ -40,6 +40,8 @@ jobs:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       HF_USERNAME: ${{ secrets.HF_USERNAME }}
       HF_SPACE: ${{ github.event.inputs.space != '' && github.event.inputs.space || secrets.HF_SPACE }}
+      JACKETT_API_KEY: ${{ secrets.JACKETT_API_KEY }}
+      JACKETT_ADMIN_PASSWORD: ${{ secrets.JACKETT_ADMIN_PASSWORD }}
 
     steps:
       - name: Check out repo
@@ -78,3 +80,26 @@ jobs:
           # snapshot — backend/huggingface-space/ is the single source of truth.
           git push --force "$remote" main
           echo "Deployed. Build status: https://huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
+
+      - name: Sync Space secrets (JACKETT_API_KEY, JACKETT_ADMIN_PASSWORD)
+        if: env.JACKETT_API_KEY != '' || env.JACKETT_ADMIN_PASSWORD != ''
+        run: |
+          set -e
+          api="https://huggingface.co/api/spaces/${HF_USERNAME}/${HF_SPACE}/secrets"
+          put_secret () {
+            local key="$1" val="$2"
+            [ -z "$val" ] && return 0
+            code=$(curl -s -o /tmp/sec-resp -w "%{http_code}" -X POST "$api" \
+              -H "Authorization: Bearer ${HF_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -nc --arg k "$key" --arg v "$val" '{key:$k, value:$v}')")
+            if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+              echo "  ok $key"
+            else
+              echo "  ! $key failed: HTTP $code $(head -c 200 /tmp/sec-resp)"
+              exit 1
+            fi
+          }
+          echo "Syncing Space secrets..."
+          put_secret JACKETT_API_KEY "$JACKETT_API_KEY"
+          put_secret JACKETT_ADMIN_PASSWORD "$JACKETT_ADMIN_PASSWORD"

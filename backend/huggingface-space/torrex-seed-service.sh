@@ -56,6 +56,28 @@ fi
 
 AUTH_OPTS=(-b "$COOKIE_JAR" -c "$COOKIE_JAR")
 
+# 2b. Ensure the admin password is set in ServerConfig.json. On a brand-new
+#     container the password is unset and admin endpoints are open; on
+#     subsequent boots the field is filled and the same call returns 200/204
+#     with no effect.
+if [ -n "$ADMIN_PWD" ]; then
+    code=$(curl -sL "${AUTH_OPTS[@]}" -o /tmp/seed-pwd -w "%{http_code}" \
+        -X POST "$BASE/api/v2.0/server/adminpassword?apikey=$API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "\"$ADMIN_PWD\"")
+    if [ "$code" = "200" ] || [ "$code" = "204" ]; then
+        echo "[torrex-seed] admin password set/refreshed (HTTP $code)"
+        # Re-login so the new password's session cookie is what we use below.
+        rm -f "$COOKIE_JAR"
+        curl -s -c "$COOKIE_JAR" -o /dev/null \
+            -H "Content-Type: application/json" \
+            -X POST "$BASE/api/v2.0/server/logon" \
+            -d "{\"password\":\"$ADMIN_PWD\"}" || true
+    else
+        echo "[torrex-seed] admin password call returned HTTP $code (likely already set)"
+    fi
+fi
+
 # 3. For each desired indexer, fetch its default config schema and POST it
 #    back. Jackett interprets that as "configure with defaults" - exactly
 #    right for public indexers.
