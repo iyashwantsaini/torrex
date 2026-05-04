@@ -1,0 +1,10 @@
+# One indexer ID per line. These are configured via Jackett's HTTP API on
+# every container start (idempotent — if already configured, the POST is a
+# no-op).
+#
+# Only list PUBLIC indexers that work without FlareSolverr or auth.
+# IDs match Jackett's internal slug (lowercase, no spaces).
+linuxtracker
+nyaasi
+thepiratebay
+therarbg

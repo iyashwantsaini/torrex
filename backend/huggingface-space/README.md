@@ -52,18 +52,18 @@ In Torrex → Settings:
 Free Spaces have **ephemeral disk** — anything Jackett writes to `/config`
 at runtime is wiped when HF rebuilds (≈weekly, or on every deploy).
 
-This image works around that with a small init script
-(`torrex-init.sh`) that runs before Jackett starts:
+This image works around that with two small s6-overlay scripts:
 
-1. **Indexers** in `seed/Indexers/*.json` are copied into
-   `/config/Jackett/Indexers/` on every boot (only if a file with the same
-   name doesn't already exist, so manual additions still survive within a
-   single container lifetime).
-2. **API key** is read from the `JACKETT_API_KEY` env var and stamped into
-   `ServerConfig.json`. Without this, Jackett generates a new random key
-   on every fresh install and the app breaks.
-3. **Admin password hash** is read from `JACKETT_ADMIN_PASSWORD_HASH`
-   (optional) so the UI stays gated from the first request.
+1. **`torrex-init.sh`** runs *before* Jackett starts and stamps the
+   `JACKETT_API_KEY` env var into `ServerConfig.json`, so the Torznab key
+   stays stable across rebuilds. Without this, Jackett generates a new
+   random key on every fresh install and the app stops working.
+2. **`torrex-seed-service.sh`** runs *in parallel with* Jackett. It waits
+   for the API to come up, then for each indexer listed in
+   `seed/indexers.txt` it `GET`s the default config schema and `POST`s it
+   back — Jackett treats that as "configure with defaults", which is the
+   right thing for public indexers. Indexers that are already configured
+   are skipped (idempotent).
 
 ### Required Space secrets
 
@@ -73,28 +73,26 @@ Open your Space → **Settings → Variables and secrets → New secret**
 | Name | Value | Notes |
 |---|---|---|
 | `JACKETT_API_KEY` | any 32-char hex string you choose | Reuse your existing key so the app keeps working without a settings change |
-| `JACKETT_ADMIN_PASSWORD_HASH` *(optional)* | bcrypt hash of your password | See below |
 
-To generate the bcrypt hash for the admin password (one-liner, requires
-`htpasswd` from `apache2-utils` or any bcrypt tool):
+The admin password is *not* baked in (Jackett's `AdminPassword` field is
+a salted SHA-512 keyed off the per-instance ID, so seeding it from
+outside is fragile). After every HF rebuild, set the admin password once
+in the UI — takes 30 seconds.
 
-```bash
-htpasswd -bnBC 10 "" 'YourStrongPassword' | tr -d ':\n'
-# copy the output (starts with $2y$10$…)
-```
-
-If you don't set `JACKETT_ADMIN_PASSWORD_HASH`, just set the password
-once in the UI after the first deploy — it'll then be carried inside the
-patched `ServerConfig.json` until the next HF rebuild.
-
-### What ships in `seed/Indexers/`
+### What ships in `seed/indexers.txt`
 
 The four public indexers known to work without FlareSolverr:
 
-- `linuxtracker.json` — legal Linux ISOs
-- `nyaasi.json` — anime
-- `thepiratebay.json` — general
-- `therarbg.json` — general / movies / TV
+- `linuxtracker` — legal Linux ISOs
+- `nyaasi` — anime
+- `thepiratebay` — general
+- `therarbg` — general / movies / TV
 
-> ⚠️ **Never commit private-tracker configs** here. Their JSONs contain
-> your passkey/cookies, and this folder is public on GitHub.
+To add more, append the indexer's slug (lowercase ID — find it under
+`<base_url>/api/v2.0/indexers` in the JSON `id` field) to that file and
+push a new `backend-v*` tag.
+
+> ⚠️ **Never commit private-tracker configs** here. Their on-disk JSONs
+> contain your passkey/cookies, and this folder is public on GitHub.
+> The API-seeding flow only sends *default* config (no auth fields), so
+> private trackers won't work via this path anyway.
