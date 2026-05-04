@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for the release build to make HTTPS calls to the Jackett backend.
+         Flutter only injects this in debug/profile manifests automatically. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="torrex"
         android:name="${applicationName}"
