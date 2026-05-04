@@ -33,17 +33,18 @@ if [ -z "$API_KEY" ]; then
 fi
 
 # Compute Jackett's password hash if a password is provided.
-# Jackett uses: SHA512( UTF-16LE(InstanceId + plain) ) as uppercase hex.
+# Jackett's SecurityService.HashPassword:
+#   bytes = UTF-8(password + InstanceId)        # password first, salt suffix
+#   hex   = BitConverter.ToString(SHA512(bytes)).Replace("-","")  # UPPERCASE
 # We re-use the API key as InstanceId so it's a stable known salt.
 PWD_HASH=""
 if [ -n "$ADMIN_PWD" ]; then
     if command -v python3 >/dev/null; then
-        PWD_HASH=$(python3 - <<PY
+        PWD_HASH=$(python3 - <<'PY'
 import hashlib, os
 salt = os.environ['JACKETT_API_KEY']
 pwd  = os.environ['JACKETT_ADMIN_PASSWORD']
-h = hashlib.sha512((salt + pwd).encode('utf-16le')).hexdigest().upper()
-print(h)
+print(hashlib.sha512((pwd + salt).encode('utf-8')).hexdigest().upper())
 PY
 )
         echo "[torrex-init] computed admin password hash (len=${#PWD_HASH})"
