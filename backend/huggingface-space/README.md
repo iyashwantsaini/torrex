@@ -58,12 +58,19 @@ This image works around that with two small s6-overlay scripts:
    `JACKETT_API_KEY` env var into `ServerConfig.json`, so the Torznab key
    stays stable across rebuilds. Without this, Jackett generates a new
    random key on every fresh install and the app stops working.
-2. **`torrex-seed-service.sh`** runs *in parallel with* Jackett. It waits
-   for the API to come up, then for each indexer listed in
+2. **`torrex-seed-service.sh`** runs *in parallel with* Jackett. It logs
+   in via the `/UI/Dashboard` form POST (using `JACKETT_ADMIN_PASSWORD`)
+   to obtain a session cookie, then for each indexer listed in
    `seed/indexers.txt` it `GET`s the default config schema and `POST`s it
    back — Jackett treats that as "configure with defaults", which is the
    right thing for public indexers. Indexers that are already configured
    are skipped (idempotent).
+
+   `torrex-init.sh` also pre-computes the `AdminPassword` hash that
+   Jackett expects — `SHA512(UTF-16LE(password + APIKey))` lowercase hex,
+   matching `Jackett.Server/Services/SecurityService.cs` — and writes it
+   into `ServerConfig.json`. So the admin password also survives rebuilds
+   and you never have to re-enter it in the UI.
 
 ### Required Space secrets
 
@@ -73,11 +80,7 @@ Open your Space → **Settings → Variables and secrets → New secret**
 | Name | Value | Notes |
 |---|---|---|
 | `JACKETT_API_KEY` | any 32-char hex string you choose | Reuse your existing key so the app keeps working without a settings change |
-
-The admin password is *not* baked in (Jackett's `AdminPassword` field is
-a salted SHA-512 keyed off the per-instance ID, so seeding it from
-outside is fragile). After every HF rebuild, set the admin password once
-in the UI — takes 30 seconds.
+| `JACKETT_ADMIN_PASSWORD` | any password you choose | Used to log in to the Jackett admin UI; also needed by the seed service to authenticate before configuring indexers |
 
 ### What ships in `seed/indexers.txt`
 

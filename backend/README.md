@@ -18,11 +18,22 @@ that mirrors `backend/huggingface-space/` to your Space on every
    <https://huggingface.co/new-space> → name e.g. `torrex-backend`.
 2. Generate an HF access token with **write** scope:
    <https://huggingface.co/settings/tokens>.
-3. Add three repo secrets in GitHub
+3. Add the repo secrets in GitHub
    (`Settings → Secrets and variables → Actions`):
    - `HF_TOKEN` — the token from step 2
    - `HF_USERNAME` — your HF username
    - `HF_SPACE` — the Space name from step 1
+   - `JACKETT_API_KEY` — any 32-char hex string; will be baked into
+     `ServerConfig.json` so the app's saved key keeps working across
+     HF rebuilds
+   - `JACKETT_ADMIN_PASSWORD` — password for the Jackett admin UI; also
+     used by the post-start seeder to authenticate before configuring
+     indexers. Pre-hashed and written into `ServerConfig.json` on boot,
+     so it also survives rebuilds.
+
+   The deploy workflow forwards `JACKETT_API_KEY` and
+   `JACKETT_ADMIN_PASSWORD` into the Space's own secrets via the HF API,
+   so they're available to the running container.
 4. Trigger the deploy:
    ```pwsh
    git tag backend-v1

@@ -189,3 +189,7 @@ Full walkthrough in [backend/README.md](backend/README.md).
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for app and backend release notes.
