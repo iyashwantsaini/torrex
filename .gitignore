@@ -1,0 +1,23 @@
+# IDEs / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Backend local state (docker-compose volumes)
+backend/data/
+
+# Flutter build artifacts (the app/ subfolder has its own .gitignore too)
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/pubspec.lock
+
+# Android signing
+**/key.properties
+**/*.jks
+**/*.keystore

@@ -1,0 +1,18 @@
+# Optional: run Jackett locally for development.
+# Use the same image the Hugging Face Space ships, but with persistent volumes
+# so config and indexer settings survive restarts.
+services:
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: torrex-jackett
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - AUTO_UPDATE=true
+    volumes:
+      - ./data/config:/config
+      - ./data/downloads:/downloads
+    ports:
+      - "9117:9117"
+    restart: unless-stopped
