@@ -98,7 +98,7 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
-/// Thin status banner shown above the body while the on-launch backend
+/// Inline status card shown above the body while the on-launch backend
 /// warm-up ping is in flight. Hidden once the Space responds (or fails —
 /// a real search will surface the actual error).
 class _WarmupBanner extends StatelessWidget {
@@ -114,12 +114,15 @@ class _WarmupBanner extends StatelessWidget {
       curve: Curves.easeOut,
       child: !visible
           ? const SizedBox.shrink()
-          : const WlmBanner(
-              tone: WlmCalloutTone.info,
-              title: 'Waking backend\u2026',
-              message:
-                  'Hugging Face Spaces sleep when idle. This usually takes '
-                  '20\u201330 seconds on first launch.',
+          : const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: WlmCallout(
+                tone: WlmCalloutTone.info,
+                title: 'Waking backend\u2026',
+                body:
+                    'Hugging Face Spaces sleep when idle. This usually takes '
+                    '20\u201330 seconds on first launch.',
+              ),
             ),
     );
   }

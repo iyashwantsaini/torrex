@@ -7,6 +7,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.1.3] – 2026-05-05
+
+#### Changed
+- Warm-up notice now renders as an inset `WlmCallout` card instead of an
+  edge-to-edge `WlmBanner`, so it lines up with the search field and the
+  rest of the body content.
+
+#### Added
+- Web-only `?warmupDelay=<ms>` URL param to artificially keep the warm-up
+  banner visible. Useful for previewing/screenshotting the state when the
+  Space is already awake. Capped at 60s. No-op on mobile.
+
 ### [0.1.2] – 2026-05-05
 
 #### Added

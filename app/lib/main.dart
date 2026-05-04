@@ -13,18 +13,26 @@ Future<void> main() async {
   await settings.load();
   await _maybeApplyUrlOverrides(settings);
   final warmer = BackendWarmer();
+  // `?warmupDelay=<ms>` (web only) artificially keeps the banner visible
+  // for N ms so we can preview the "Waking backend…" UI even when the
+  // Space is already awake. Capped at 60s to avoid foot-guns.
+  final delayParam = Uri.base.queryParameters['warmupDelay'];
+  final delayMs = int.tryParse(delayParam ?? '');
+  final artificialDelay = (delayMs != null && delayMs > 0)
+      ? Duration(milliseconds: delayMs.clamp(0, 60000))
+      : null;
   // Fire-and-forget — the UI shows a banner while this is in flight.
   // Hugging Face Spaces sleep after ~48h; this hides the cold start
   // behind whatever the user is doing on the home screen.
   // ignore: discarded_futures
-  warmer.warm(settings);
+  warmer.warm(settings, artificialDelay: artificialDelay);
   // Re-warm whenever the user saves a new backend URL in Settings.
   String lastBase = settings.baseUrl;
   settings.addListener(() {
     if (settings.baseUrl != lastBase) {
       lastBase = settings.baseUrl;
       // ignore: discarded_futures
-      warmer.warm(settings);
+      warmer.warm(settings, artificialDelay: artificialDelay);
     }
   });
   runApp(TorrexApp(

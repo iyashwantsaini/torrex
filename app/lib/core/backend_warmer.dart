@@ -44,7 +44,16 @@ class BackendWarmer extends ChangeNotifier {
   WarmupState get state => _state;
 
   /// Fire-and-forget warm-up ping. Safe to call at any time.
-  Future<void> warm(SettingsStore settings) async {
+  ///
+  /// [artificialDelay] keeps the state in [WarmupState.waking] for the
+  /// given duration *in addition* to the real network call. Used by the
+  /// `?warmupDelay=<ms>` URL param on web to let us preview the banner
+  /// when the Space is already awake. Pass `null` (default) for normal
+  /// behaviour.
+  Future<void> warm(
+    SettingsStore settings, {
+    Duration? artificialDelay,
+  }) async {
     final base = settings.baseUrl.trim();
     if (base.isEmpty || base == 'demo') {
       _set(WarmupState.idle);
@@ -59,12 +68,17 @@ class BackendWarmer extends ChangeNotifier {
     // `/UI/Dashboard` is a tiny static page that wakes the Space and proves
     // Jackett's web layer is up. We deliberately don't hit a Torznab
     // endpoint — that would require the API key and a real query.
+    WarmupState next;
     try {
       await _dio.get<void>('$trimmed/UI/Dashboard');
-      _set(WarmupState.ready);
+      next = WarmupState.ready;
     } catch (_) {
-      _set(WarmupState.failed);
+      next = WarmupState.failed;
     }
+    if (artificialDelay != null && artificialDelay > Duration.zero) {
+      await Future<void>.delayed(artificialDelay);
+    }
+    _set(next);
   }
 
   void _set(WarmupState next) {
