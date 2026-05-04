@@ -31,6 +31,24 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: launcher_icon
+  ios: false
+  remove_alpha_ios: true
+  image_path: "assets/icon/torrex.png"
+  adaptive_icon_background: "#0E0E10"
+  adaptive_icon_foreground: "assets/icon/torrex_fg.png"
+  web:
+    generate: true
+    image_path: "assets/icon/torrex.png"
+    background_color: "#0E0E10"
+    theme_color: "#989EDC"
+  windows:
+    generate: false
+  macos:
+    generate: false
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

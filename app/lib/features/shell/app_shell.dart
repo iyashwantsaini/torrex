@@ -20,10 +20,50 @@ class _AppShellState extends State<AppShell> {
 
   static const _titles = ['Torrex', 'Settings'];
 
+  IconData _themeIcon() {
+    switch (widget.settings.themeMode) {
+      case ThemeMode.light:
+        return Icons.wb_sunny_outlined;
+      case ThemeMode.dark:
+        return Icons.dark_mode_outlined;
+      case ThemeMode.system:
+        return Icons.brightness_auto_outlined;
+    }
+  }
+
+  String _themeTooltip() {
+    switch (widget.settings.themeMode) {
+      case ThemeMode.light:
+        return 'Theme: light \u00b7 tap for dark';
+      case ThemeMode.dark:
+        return 'Theme: dark \u00b7 tap for system';
+      case ThemeMode.system:
+        return 'Theme: system \u00b7 tap for light';
+    }
+  }
+
+  void _cycleTheme() {
+    final next = switch (widget.settings.themeMode) {
+      ThemeMode.system => ThemeMode.light,
+      ThemeMode.light => ThemeMode.dark,
+      ThemeMode.dark => ThemeMode.system,
+    };
+    widget.settings.update(themeMode: next);
+  }
+
   @override
   Widget build(BuildContext context) {
     return WlmAppScaffold(
-      appBar: WlmAppBar(title: _titles[_index]),
+      appBar: WlmAppBar(
+        title: _titles[_index],
+        actions: [
+          WlmHeaderIconButton(
+            icon: _themeIcon(),
+            tooltip: _themeTooltip(),
+            onPressed: _cycleTheme,
+          ),
+        ],
+      ),
       body: IndexedStack(
         index: _index,
         children: [

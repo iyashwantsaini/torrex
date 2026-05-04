@@ -18,6 +18,7 @@ class DetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final hash = _extractHash(result.magnetUri);
 
     return WlmAppScaffold(
@@ -35,52 +36,96 @@ class DetailPage extends StatelessWidget {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          Text(result.title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          // Title — wraps cleanly, no overflow even for long release names.
+          Text(
+            result.title,
+            style: theme.textTheme.titleMedium,
+            softWrap: true,
+          ),
+          const SizedBox(height: 12),
+          if (result.indexer.isNotEmpty || result.category.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                if (result.indexer.isNotEmpty) WlmChip(label: result.indexer),
+                if (result.category.isNotEmpty) WlmChip(label: result.category),
+                if (result.hasMagnet) const WlmChip(label: 'magnet'),
+              ],
+            ),
+          const SizedBox(height: 20),
+
+          // Swarm stats — three balanced columns using WlmStat for the
+          // editorial big-number look.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              WlmChip(label: '↑ ${result.seeders} seeders'),
-              WlmChip(label: '↓ ${result.leechers} leechers'),
-              WlmChip(label: formatBytes(result.sizeBytes)),
-              WlmChip(label: formatRelative(result.publishDate)),
-              if (result.indexer.isNotEmpty) WlmChip(label: result.indexer),
-              if (result.category.isNotEmpty) WlmChip(label: result.category),
-              if (result.hasMagnet) const WlmChip(label: 'magnet'),
+              Expanded(
+                child: WlmStat(
+                  label: 'Seeders',
+                  value: '${result.seeders}',
+                  trend: '\u2191',
+                  trendPositive: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: WlmStat(
+                  label: 'Leechers',
+                  value: '${result.leechers}',
+                  trend: '\u2193',
+                  trendPositive: false,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: WlmStat(
+                  label: 'Size',
+                  value: formatBytes(result.sizeBytes),
+                ),
+              ),
             ],
           ),
+
           const SizedBox(height: 24),
+          const WlmDivider(),
+          const SizedBox(height: 16),
+
           const WlmSectionLabel('Details'),
           const SizedBox(height: 8),
-          WlmSpecRow(label: 'Seeders', value: '${result.seeders}'),
-          WlmSpecRow(label: 'Leechers', value: '${result.leechers}'),
-          WlmSpecRow(label: 'Size', value: formatBytes(result.sizeBytes)),
           WlmSpecRow(
             label: 'Published',
             value: result.publishDate?.toLocal().toString().split('.').first ??
                 'Unknown',
           ),
+          WlmSpecRow(
+            label: 'Age',
+            value: formatRelative(result.publishDate),
+          ),
           if (result.indexer.isNotEmpty)
             WlmSpecRow(label: 'Indexer', value: result.indexer),
           if (result.category.isNotEmpty)
             WlmSpecRow(label: 'Category', value: result.category),
-          if (hash != null) WlmSpecRow(label: 'Info hash', value: hash),
+
           const SizedBox(height: 24),
+
+          if (hash != null) ...[
+            const WlmSectionLabel('Info hash'),
+            const SizedBox(height: 8),
+            WlmCodeBlock(code: hash, language: 'btih'),
+            const SizedBox(height: 16),
+          ],
+
           if (result.hasMagnet) ...[
             const WlmSectionLabel('Magnet'),
             const SizedBox(height: 8),
-            WlmCard(
-              padding: const EdgeInsets.all(12),
-              child: SelectableText(
-                result.magnetUri,
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
+            WlmCodeBlock(code: result.magnetUri, language: 'magnet'),
             const SizedBox(height: 16),
           ],
+
+          const SizedBox(height: 8),
           WlmPrimaryButton(
             label: 'Open magnet',
             icon: Icons.open_in_new,
@@ -99,28 +144,45 @@ class DetailPage extends StatelessWidget {
                 : null,
           ),
           const SizedBox(height: 8),
-          WlmGhostButton(
-            label: 'Copy link',
-            icon: Icons.copy_outlined,
-            expand: true,
-            onPressed: () => _copy(context),
+          Row(
+            children: [
+              Expanded(
+                child: WlmGhostButton(
+                  label: 'Copy link',
+                  icon: Icons.copy_outlined,
+                  expand: true,
+                  onPressed: () => _copy(context),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: WlmGhostButton(
+                  label: 'Indexer page',
+                  icon: Icons.public_outlined,
+                  expand: true,
+                  onPressed: result.detailsUrl.isNotEmpty
+                      ? () => _openUri(context, result.detailsUrl)
+                      : null,
+                ),
+              ),
+            ],
           ),
-          if (result.detailsUrl.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            WlmGhostButton(
-              label: 'View on indexer',
-              icon: Icons.public_outlined,
-              expand: true,
-              onPressed: () => _openUri(context, result.detailsUrl),
-            ),
-          ],
+
           const SizedBox(height: 24),
           const WlmCallout(
-            title: 'How does "Open magnet" work?',
+            tone: WlmCalloutTone.info,
+            title: 'How does \u201cOpen magnet\u201d work?',
             body:
                 'Android shows a chooser with every torrent client installed '
-                '(LibreTorrent, Flud, 1DM, …). If you have none installed, '
+                '(LibreTorrent, Flud, 1DM, \u2026). If you have none installed, '
                 'install one from the Play Store / F-Droid first.',
+          ),
+          const SizedBox(height: 16),
+          // A subtle reminder that Torrex is search-only.
+          Text(
+            'Torrex never downloads or seeds. Use only for legal content.',
+            style: theme.textTheme.bodySmall?.copyWith(color: scheme.outline),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
