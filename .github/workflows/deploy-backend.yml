@@ -1,0 +1,80 @@
+name: Deploy backend to Hugging Face
+
+# Hugging Face Spaces are plain git repos. We mirror the contents of
+# `backend/huggingface-space/` to the Space repo so HF rebuilds the Docker
+# container automatically.
+#
+# Triggered by:
+#   - manual dispatch (any branch) — useful for first push / re-deploys
+#   - pushing a tag named `backend-v*` (e.g. backend-v1, backend-v2024.05.05)
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   HF_TOKEN     — a User Access Token with **write** scope.
+#                  Create at https://huggingface.co/settings/tokens
+#   HF_USERNAME  — your Hugging Face username (e.g. iyashwantsaini)
+#   HF_SPACE     — the Space name (e.g. torrex-backend)
+#
+# The Space must already exist (one-time, ~30s):
+#   https://huggingface.co/new-space → SDK: Docker, Visibility: Public.
+# After that, every tag/dispatch updates it without leaving GitHub.
+
+on:
+  push:
+    tags:
+      - "backend-v*"
+  workflow_dispatch:
+    inputs:
+      space:
+        description: "Override HF_SPACE (optional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Mirror backend/ to HF Space
+    runs-on: ubuntu-latest
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_USERNAME: ${{ secrets.HF_USERNAME }}
+      HF_SPACE: ${{ github.event.inputs.space != '' && github.event.inputs.space || secrets.HF_SPACE }}
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Validate secrets
+        run: |
+          : "${HF_TOKEN:?HF_TOKEN secret is required}"
+          : "${HF_USERNAME:?HF_USERNAME secret is required}"
+          : "${HF_SPACE:?HF_SPACE secret is required}"
+          echo "Target: https://huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
+
+      - name: Stage Space contents
+        run: |
+          mkdir -p _hfspace
+          cp -R backend/huggingface-space/. _hfspace/
+          # Sanity check — Spaces require a YAML frontmatter README.
+          head -n 10 _hfspace/README.md
+          ls -la _hfspace
+
+      - name: Push to Hugging Face Space
+        working-directory: _hfspace
+        run: |
+          git init -q
+          git checkout -q -b main
+          git config user.email "github-actions@users.noreply.github.com"
+          git config user.name  "torrex-ci"
+          # Hugging Face requires the Git LFS attributes file to be present
+          # in fresh Space repos; create an empty one if missing.
+          touch .gitattributes
+          git add -A
+          git commit -q -m "ci: deploy backend ${GITHUB_REF_NAME:-manual} ($GITHUB_SHA)"
+
+          remote="https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
+          # Force-push because the Space repo is owned by this workflow's
+          # snapshot — backend/huggingface-space/ is the single source of truth.
+          git push --force "$remote" main
+          echo "Deployed. Build status: https://huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"

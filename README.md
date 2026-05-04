@@ -148,6 +148,28 @@ For upgrade-compatible signing, add these repo secrets:
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
 `ANDROID_KEY_PASSWORD`. Without them the workflow signs with the debug key.
 
+### Backend deploys (Hugging Face Space)
+
+```mermaid
+flowchart LR
+    DEV2["git tag backend-v1<br/>git push origin backend-v1"] --> GH2["GitHub Actions<br/>(deploy-backend.yml)"]
+    GH2 --> MIRROR["Mirror backend/huggingface-space/<br/>to HF Space repo"]
+    MIRROR --> HF["Hugging Face<br/>rebuilds Docker Space"]
+    HF --> JK["Jackett live at<br/>&lt;space&gt;.hf.space"]
+```
+
+Tag with `backend-v*` (or run **Actions → Deploy backend to Hugging Face**)
+and the workflow force-pushes `backend/huggingface-space/` to your Space.
+Add three secrets first:
+
+| Secret | Where |
+|---|---|
+| `HF_TOKEN` | <https://huggingface.co/settings/tokens> (scope: **write**) |
+| `HF_USERNAME` | your HF username |
+| `HF_SPACE` | the Space name you created |
+
+Full walkthrough in [backend/README.md](backend/README.md).
+
 ## Design
 
 - Mono / editorial aesthetic from **WolwoLoom 0.3.4**

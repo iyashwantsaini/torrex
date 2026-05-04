@@ -16,6 +16,12 @@ Flutter app.
 
 ## One-time setup
 
+> The fastest path is the CI workflow — see
+> [`backend/README.md`](../README.md). It mirrors this folder to your Space
+> on every `backend-v*` tag, so you never have to upload files by hand.
+>
+> The manual steps below remain valid if you just want a one-off Space.
+
 1. **Create a new Space** on https://huggingface.co/new-space
    - SDK: **Docker**
    - Visibility: **Public** (so the app can reach it without an HF token)
