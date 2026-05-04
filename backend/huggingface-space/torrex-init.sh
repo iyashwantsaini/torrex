@@ -1,30 +1,79 @@
 #!/usr/bin/with-contenv bash
-# Torrex pre-start init — runs before Jackett (s6-overlay cont-init.d).
-# Stamps a stable APIKey into ServerConfig.json so the Torznab key
-# survives HF Space rebuilds (otherwise Jackett generates a fresh one
-# on every clean install).
+# Torrex pre-start init - runs before Jackett (s6-overlay cont-init.d).
+#
+# We bake APIKey, InstanceId and AdminPassword directly into
+# ServerConfig.json so a fresh HF rebuild boots into a fully
+# pre-authenticated Jackett:
+#   - APIKey       = $JACKETT_API_KEY  (Torznab key the app uses)
+#   - InstanceId   = $JACKETT_API_KEY  (re-used as a stable salt; Jackett
+#                                       only requires it to be a non-empty
+#                                       string and uses it as the password
+#                                       hash salt)
+#   - AdminPassword = SHA512( UTF-16LE( InstanceId + plain_password ) )
+#                     in uppercase hex with no separators - this is exactly
+#                     what Jackett's SecurityService.HashPassword produces.
+#
+# Doing this here (cont-init.d, before Jackett starts) avoids the API
+# chicken-and-egg where /api/v2.0/server/adminpassword requires auth to set
+# the password.
 
 set -e
 
 CONFIG_DIR=/config/Jackett
 SERVER_CONFIG=$CONFIG_DIR/ServerConfig.json
-
 mkdir -p "$CONFIG_DIR"
 
-if [ -n "${JACKETT_API_KEY:-}" ]; then
-    if [ ! -f "$SERVER_CONFIG" ]; then
-        cat > "$SERVER_CONFIG" <<JSON
-{
-  "Port": 9117,
-  "AllowExternal": true,
-  "APIKey": "$JACKETT_API_KEY"
-}
-JSON
-        echo "[torrex-init] created ServerConfig.json with stable API key"
-    elif grep -q '"APIKey"' "$SERVER_CONFIG"; then
-        sed -i -E "s|\"APIKey\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"APIKey\": \"$JACKETT_API_KEY\"|" "$SERVER_CONFIG"
-        echo "[torrex-init] patched APIKey in ServerConfig.json"
+API_KEY="${JACKETT_API_KEY:-}"
+ADMIN_PWD="${JACKETT_ADMIN_PASSWORD:-}"
+
+if [ -z "$API_KEY" ]; then
+    echo "[torrex-init] no JACKETT_API_KEY set - skipping config bake"
+    chmod -R 0777 /config
+    exit 0
+fi
+
+# Compute Jackett's password hash if a password is provided.
+PWD_HASH=""
+if [ -n "$ADMIN_PWD" ]; then
+    if command -v iconv >/dev/null && command -v openssl >/dev/null; then
+        PWD_HASH=$(printf '%s' "${API_KEY}${ADMIN_PWD}" \
+            | iconv -f UTF-8 -t UTF-16LE \
+            | openssl dgst -sha512 -hex \
+            | awk '{print $NF}' \
+            | tr 'a-f' 'A-F')
+        echo "[torrex-init] computed admin password hash"
+    else
+        echo "[torrex-init] iconv/openssl missing - cannot pre-hash password"
     fi
 fi
 
+# Write ServerConfig.json. We always overwrite since the env values are the
+# source of truth - that's the whole point of this image.
+cat > "$SERVER_CONFIG" <<JSON
+{
+  "Port": 9117,
+  "AllowExternal": true,
+  "APIKey": "$API_KEY",
+  "InstanceId": "$API_KEY",
+  "AdminPassword": "$PWD_HASH",
+  "UpdateDisabled": false,
+  "UpdatePrerelease": false,
+  "BasePathOverride": "",
+  "BaseUrlOverride": "",
+  "OmdbApiKey": "",
+  "OmdbApiUrl": "",
+  "ProxyType": 0,
+  "ProxyUrl": "",
+  "ProxyPort": null,
+  "ProxyUsername": "",
+  "ProxyPassword": "",
+  "FlareSolverrUrl": "",
+  "FlareSolverrMaxTimeout": 55000,
+  "CacheEnabled": true,
+  "CacheTtl": 2100,
+  "CacheMaxResultsPerIndexer": 1000
+}
+JSON
+
+echo "[torrex-init] wrote ServerConfig.json (api_key set, password ${PWD_HASH:+set}${PWD_HASH:-empty})"
 chmod -R 0777 /config

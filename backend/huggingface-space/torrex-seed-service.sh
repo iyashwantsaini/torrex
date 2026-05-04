@@ -1,13 +1,12 @@
 #!/usr/bin/with-contenv bash
 # Torrex post-start seeder.
-# Runs in parallel with Jackett under s6-overlay (services.d). Polls until
-# the API is up, sets the admin password if env-provided, logs in, then
-# POSTs default config for each indexer in /seed/indexers.txt.
+# Runs in parallel with Jackett under s6-overlay (services.d).
+# By the time we get here, torrex-init.sh has already pre-baked
+# ServerConfig.json with APIKey + InstanceId + AdminPassword hash, so
+# Jackett comes up with the password already set. We just need to log in
+# (form POST to /UI/Dashboard) to get a session cookie, then POST default
+# config for each indexer in /seed/indexers.txt.
 # s6 services must not exit, so we sleep at the end.
-#
-# Auth model: ?apikey= only authorizes Torznab read endpoints. Admin
-# endpoints (config writes, indexer add) require the cookie set by the
-# /UI/Dashboard form POST. We do that login here and reuse the cookie jar.
 
 set -u
 
@@ -22,24 +21,7 @@ if [ -z "$API_KEY" ] || [ ! -f "$SEED_FILE" ]; then
     exec sleep infinity
 fi
 
-# do_login: POSTs the password to /UI/Dashboard and verifies a session
-# cookie was issued. Returns 0 on success, 1 otherwise.
-do_login () {
-    local pwd="$1"
-    rm -f "$COOKIE_JAR"
-    curl -s -c "$COOKIE_JAR" -o /tmp/seed-login -w "" \
-        -X POST "$BASE/UI/Dashboard" \
-        --data-urlencode "password=$pwd" >/dev/null 2>&1 || true
-    # Curl cookie-jar lines start with the domain; a successful login
-    # writes a Jackett auth cookie. Empty jar (only the comment header)
-    # means login failed.
-    if [ -s "$COOKIE_JAR" ] && grep -qE '^[^#]' "$COOKIE_JAR"; then
-        return 0
-    fi
-    return 1
-}
-
-# 1. Wait for Jackett. /UI/Dashboard returns 200 (no pwd) or 302 (locked).
+# Wait for Jackett to be reachable.
 echo "[torrex-seed] waiting for Jackett..."
 for i in $(seq 1 90); do
     code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/UI/Dashboard")
@@ -50,34 +32,36 @@ for i in $(seq 1 90); do
     sleep 2
 done
 
-# 2. Try to log in with the env password. If that fails AND a password env
-#    is provided, the container is fresh - set the password (open endpoint
-#    on a fresh install) then log in.
+# Log in. Try a few times - first request after startup occasionally races
+# the auth subsystem.
+rm -f "$COOKIE_JAR"
+login_ok=0
 if [ -n "$ADMIN_PWD" ]; then
-    if do_login "$ADMIN_PWD"; then
-        echo "[torrex-seed] login OK (existing password)"
-    else
-        echo "[torrex-seed] login failed - assuming fresh install, setting admin password..."
-        code=$(curl -sL -o /tmp/seed-pwd -w "%{http_code}" \
-            -X POST "$BASE/api/v2.0/server/adminpassword?apikey=$API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "\"$ADMIN_PWD\"")
-        echo "[torrex-seed] adminpassword set HTTP $code"
-        sleep 2
-        if do_login "$ADMIN_PWD"; then
-            echo "[torrex-seed] login OK (after pwd set)"
-        else
-            echo "[torrex-seed] login STILL failed - admin endpoints will 302; aborting seed"
-            exec sleep infinity
+    for attempt in 1 2 3 4 5; do
+        rm -f "$COOKIE_JAR"
+        curl -s -c "$COOKIE_JAR" -o /dev/null \
+            -X POST "$BASE/UI/Dashboard" \
+            --data-urlencode "password=$ADMIN_PWD" || true
+        if [ -s "$COOKIE_JAR" ] && grep -qE '^[^#].*Jackett' "$COOKIE_JAR"; then
+            echo "[torrex-seed] login OK (attempt $attempt)"
+            login_ok=1
+            break
         fi
+        sleep 2
+    done
+    if [ $login_ok -ne 1 ]; then
+        echo "[torrex-seed] WARNING: login never succeeded - admin endpoints will 302 and seed will fail"
     fi
+else
+    # No password - admin endpoints are open. Empty cookie jar is fine.
+    touch "$COOKIE_JAR"
 fi
 
 AUTH_OPTS=(-b "$COOKIE_JAR" -c "$COOKIE_JAR")
 
-# 3. For each indexer, fetch its default config schema and POST it back.
-#    Jackett interprets that as "configure with defaults" - exactly right
-#    for public indexers.
+# For each indexer, fetch its default config schema and POST it back.
+# Jackett interprets that as "configure with defaults" - exactly right for
+# public indexers.
 ok=0; fail=0
 while IFS= read -r line; do
     id="${line%%#*}"
