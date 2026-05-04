@@ -21,3 +21,7 @@ backend/data/
 **/key.properties
 **/*.jks
 **/*.keystore
+
+# Local secrets (keystore + GitHub Actions secret values).
+# Never commit. Regenerate from .secrets/credentials.txt if lost.
+.secrets/
