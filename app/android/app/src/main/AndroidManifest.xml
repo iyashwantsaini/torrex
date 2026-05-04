@@ -41,5 +41,19 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Resolve magnet: links so url_launcher can find installed torrent clients. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="magnet"/>
+        </intent>
+        <!-- Resolve http(s) for the "View on indexer" action. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="http"/>
+        </intent>
     </queries>
 </manifest>

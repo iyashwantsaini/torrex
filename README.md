@@ -30,6 +30,35 @@ torrex/
 3. In the app's **Settings** screen, paste the backend URL + Jackett API key.
 4. Search.
 
+## Screens
+
+- **Search** — query field, sort (seeders / size / date), result list with
+  swarm/size/age chips. Tap a row to open the detail view.
+- **Detail** — full title, all metadata, info-hash, raw magnet, and four
+  actions:
+  - **Open magnet** → Android system chooser → installed torrent clients
+    (LibreTorrent / Flud / 1DM / …)
+  - **Download .torrent** → indexer-hosted blob (when no magnet is provided)
+  - **Copy link** → clipboard
+  - **View on indexer** → opens the original details page in the browser
+- **Settings** — backend URL, API key (stored in Keystore, not plain prefs),
+  default indexer, theme (system / light / dark).
+
+## Releases
+
+CI publishes signed APKs on every `v*` tag — see
+[`.github/workflows/release.yml`](.github/workflows/release.yml). To cut a
+release:
+
+```pwsh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+For upgrade-compatible signing, add these repo secrets:
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD`. Without them the workflow signs with the debug key.
+
 ## Design
 
 - Mono / editorial aesthetic from **WolwoLoom 0.3.4**

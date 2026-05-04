@@ -7,6 +7,7 @@ import '../../core/formatters.dart';
 import '../../core/settings_store.dart';
 import '../../core/torznab_client.dart';
 import '../../models/torrent_result.dart';
+import '../detail/detail_page.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key, required this.settings});
@@ -178,8 +179,18 @@ class _SearchPageState extends State<SearchPage> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       itemCount: _results.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (_, i) =>
-          _ResultCard(result: _results[i], onOpen: _openMagnet, onCopy: _copy),
+      itemBuilder: (_, i) => _ResultCard(
+        result: _results[i],
+        onTap: _openDetail,
+        onOpen: _openMagnet,
+        onCopy: _copy,
+      ),
+    );
+  }
+
+  void _openDetail(TorrentResult r) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => DetailPage(result: r)),
     );
   }
 
@@ -219,11 +230,13 @@ enum _SortBy { seeders, size, date }
 class _ResultCard extends StatelessWidget {
   const _ResultCard({
     required this.result,
+    required this.onTap,
     required this.onOpen,
     required this.onCopy,
   });
 
   final TorrentResult result;
+  final ValueChanged<TorrentResult> onTap;
   final ValueChanged<TorrentResult> onOpen;
   final ValueChanged<TorrentResult> onCopy;
 
@@ -231,7 +244,7 @@ class _ResultCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return WlmCard(
-      onTap: () => onOpen(result),
+      onTap: () => onTap(result),
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
