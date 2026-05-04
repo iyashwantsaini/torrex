@@ -1,14 +1,13 @@
 #!/usr/bin/with-contenv bash
 # Torrex post-start seeder.
 # Runs in parallel with Jackett under s6-overlay (services.d). Polls until
-# the API is up, then POSTs default config for each indexer in
-# /seed/indexers.txt. s6 services must not exit, so we sleep at the end.
+# the API is up, sets the admin password if env-provided, logs in, then
+# POSTs default config for each indexer in /seed/indexers.txt.
+# s6 services must not exit, so we sleep at the end.
 #
-# Auth model: once an admin password is set, Jackett's /api/v2.0/indexers/*/config
-# admin endpoints redirect unauthenticated requests to /UI/Login, even when
-# ?apikey=... is present (apikey only authorizes Torznab read endpoints).
-# So we POST the password to /api/v2.0/server/logon first to grab the
-# Jackett auth cookie and reuse it for the admin calls.
+# Auth model: ?apikey= only authorizes Torznab read endpoints. Admin
+# endpoints (config writes, indexer add) require the cookie set by the
+# /UI/Dashboard form POST. We do that login here and reuse the cookie jar.
 
 set -u
 
@@ -23,8 +22,24 @@ if [ -z "$API_KEY" ] || [ ! -f "$SEED_FILE" ]; then
     exec sleep infinity
 fi
 
-# 1. Wait for Jackett. Hit the dashboard root since admin endpoints require
-#    auth and the torznab probe needs an indexer that may not exist yet.
+# do_login: POSTs the password to /UI/Dashboard and verifies a session
+# cookie was issued. Returns 0 on success, 1 otherwise.
+do_login () {
+    local pwd="$1"
+    rm -f "$COOKIE_JAR"
+    curl -s -c "$COOKIE_JAR" -o /tmp/seed-login -w "" \
+        -X POST "$BASE/UI/Dashboard" \
+        --data-urlencode "password=$pwd" >/dev/null 2>&1 || true
+    # Curl cookie-jar lines start with the domain; a successful login
+    # writes a Jackett auth cookie. Empty jar (only the comment header)
+    # means login failed.
+    if [ -s "$COOKIE_JAR" ] && grep -qE '^[^#]' "$COOKIE_JAR"; then
+        return 0
+    fi
+    return 1
+}
+
+# 1. Wait for Jackett. /UI/Dashboard returns 200 (no pwd) or 302 (locked).
 echo "[torrex-seed] waiting for Jackett..."
 for i in $(seq 1 90); do
     code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/UI/Dashboard")
@@ -35,52 +50,34 @@ for i in $(seq 1 90); do
     sleep 2
 done
 
-# 2. Log in if an admin password is set. Try the JSON logon endpoint (newer
-#    Jackett) and the legacy form POST; whichever works seeds the cookie jar.
-rm -f "$COOKIE_JAR"
+# 2. Try to log in with the env password. If that fails AND a password env
+#    is provided, the container is fresh - set the password (open endpoint
+#    on a fresh install) then log in.
 if [ -n "$ADMIN_PWD" ]; then
-    echo "[torrex-seed] logging in..."
-    curl -s -c "$COOKIE_JAR" -o /dev/null \
-        -H "Content-Type: application/json" \
-        -X POST "$BASE/api/v2.0/server/logon" \
-        -d "{\"password\":\"$ADMIN_PWD\"}" || true
-    curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" -o /dev/null \
-        -X POST "$BASE/UI/Dashboard" \
-        --data-urlencode "password=$ADMIN_PWD" || true
-    if grep -q Jackett "$COOKIE_JAR" 2>/dev/null; then
-        echo "[torrex-seed] login OK"
+    if do_login "$ADMIN_PWD"; then
+        echo "[torrex-seed] login OK (existing password)"
     else
-        echo "[torrex-seed] login produced no cookie - admin endpoints may 302"
+        echo "[torrex-seed] login failed - assuming fresh install, setting admin password..."
+        code=$(curl -sL -o /tmp/seed-pwd -w "%{http_code}" \
+            -X POST "$BASE/api/v2.0/server/adminpassword?apikey=$API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "\"$ADMIN_PWD\"")
+        echo "[torrex-seed] adminpassword set HTTP $code"
+        sleep 2
+        if do_login "$ADMIN_PWD"; then
+            echo "[torrex-seed] login OK (after pwd set)"
+        else
+            echo "[torrex-seed] login STILL failed - admin endpoints will 302; aborting seed"
+            exec sleep infinity
+        fi
     fi
 fi
 
 AUTH_OPTS=(-b "$COOKIE_JAR" -c "$COOKIE_JAR")
 
-# 2b. Ensure the admin password is set in ServerConfig.json. On a brand-new
-#     container the password is unset and admin endpoints are open; on
-#     subsequent boots the field is filled and the same call returns 200/204
-#     with no effect.
-if [ -n "$ADMIN_PWD" ]; then
-    code=$(curl -sL "${AUTH_OPTS[@]}" -o /tmp/seed-pwd -w "%{http_code}" \
-        -X POST "$BASE/api/v2.0/server/adminpassword?apikey=$API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "\"$ADMIN_PWD\"")
-    if [ "$code" = "200" ] || [ "$code" = "204" ]; then
-        echo "[torrex-seed] admin password set/refreshed (HTTP $code)"
-        # Re-login so the new password's session cookie is what we use below.
-        rm -f "$COOKIE_JAR"
-        curl -s -c "$COOKIE_JAR" -o /dev/null \
-            -H "Content-Type: application/json" \
-            -X POST "$BASE/api/v2.0/server/logon" \
-            -d "{\"password\":\"$ADMIN_PWD\"}" || true
-    else
-        echo "[torrex-seed] admin password call returned HTTP $code (likely already set)"
-    fi
-fi
-
-# 3. For each desired indexer, fetch its default config schema and POST it
-#    back. Jackett interprets that as "configure with defaults" - exactly
-#    right for public indexers.
+# 3. For each indexer, fetch its default config schema and POST it back.
+#    Jackett interprets that as "configure with defaults" - exactly right
+#    for public indexers.
 ok=0; fail=0
 while IFS= read -r line; do
     id="${line%%#*}"
