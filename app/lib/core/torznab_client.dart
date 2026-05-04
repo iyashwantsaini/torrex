@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:xml/xml.dart';
 
 import '../models/torrent_result.dart';
+import 'demo_results.dart';
 
 /// Thin client for the Torznab API exposed by Jackett / Prowlarr.
 ///
@@ -37,6 +38,10 @@ class TorznabClient {
     String indexer = 'all',
     int limit = 100,
   }) async {
+    if (baseUrl == DemoResults.triggerUrl) {
+      // Local preview / screenshot mode — no network call.
+      return DemoResults.forQuery(query);
+    }
     if (baseUrl.isEmpty) throw const TorznabException('Backend URL not set.');
     if (apiKey.isEmpty) throw const TorznabException('API key not set.');
 

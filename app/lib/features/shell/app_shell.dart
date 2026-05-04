@@ -6,16 +6,17 @@ import '../search/search_page.dart';
 import '../settings/settings_page.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.settings});
+  const AppShell({super.key, required this.settings, this.initialIndex = 0});
 
   final SettingsStore settings;
+  final int initialIndex;
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends State<AppShell> {
-  int _index = 0;
+  late int _index = widget.initialIndex;
 
   static const _titles = ['Torrex', 'Settings'];
 

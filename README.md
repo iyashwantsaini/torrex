@@ -3,18 +3,71 @@
 A Flutter torrent-search client built on the
 [WolwoLoom](https://github.com/iyashwantsaini/WolwoLoom) design system.
 Talks to any **Torznab**-compatible backend (Jackett or Prowlarr), so a single
-search hits every indexer you've configured.
+search hits every indexer you've configured — and a tap on a result hands the
+magnet link to whatever torrent client you have installed.
 
 > ⚠️ Torrex is metadata only. It searches public Torznab indexers and hands
 > magnet links to whatever torrent client you have installed. It does not
 > download or seed anything itself. Use it for legal content only.
 
+## Preview
+
+| Search · empty | Search · results | Detail | Settings |
+|---|---|---|---|
+| ![](docs/screenshots/01-search-empty-light.png) | ![](docs/screenshots/02-search-results-dark.png) | ![](docs/screenshots/04-detail-dark.png) | ![](docs/screenshots/05-settings-dark.png) |
+
+Full gallery (with both themes and capture instructions) lives in
+[docs/README.md](docs/README.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph Phone["Android phone"]
+        APP["Torrex<br/>(Flutter + WolwoLoom)"]
+        TC["Torrent client<br/>LibreTorrent / Flud / 1DM"]
+    end
+    subgraph Cloud["Free Hugging Face Space (Docker)"]
+        JACK["Jackett<br/>Torznab API · :9117"]
+    end
+    subgraph Net["Public indexers"]
+        I1["1337x"]
+        I2["Nyaa"]
+        I3["TheRarBg"]
+        IN["…+500 more"]
+    end
+
+    APP -- "1. HTTPS Torznab search" --> JACK
+    JACK -- "2. Per-indexer scrape" --> I1 & I2 & I3 & IN
+    I1 & I2 & I3 & IN -- "3. Results" --> JACK
+    JACK -- "4. Aggregated XML" --> APP
+    APP -- "5. magnet:?xt=… (Intent.ACTION_VIEW)" --> TC
+    TC -- "6. Joins swarm directly" --> Net
+```
+
+The phone never talks to indexer sites directly — only to your Jackett
+backend. The actual torrent download happens **outside Torrex**, in whichever
+torrent client the user picks from the Android system chooser.
+
 ## Repo layout
 
 ```
 torrex/
-├── app/        # Flutter app (Android + iOS), depends on wolwoloom
-└── backend/    # Jackett deployment — Hugging Face Space + docker-compose
+├── app/                       # Flutter app (Android + iOS + Web)
+│   ├── lib/
+│   │   ├── core/              # settings_store, torznab_client, demo_results
+│   │   ├── models/            # torrent_result
+│   │   └── features/
+│   │       ├── shell/         # bottom-nav scaffold
+│   │       ├── search/        # query field, sort, result cards
+│   │       ├── detail/        # full result view + magnet/torrent actions
+│   │       └── settings/      # backend + theme
+│   └── pubspec.yaml
+├── backend/
+│   ├── docker-compose.yml     # local dev (Jackett, persistent volumes)
+│   └── huggingface-space/     # Dockerfile + README — drop into a free HF Space
+├── docs/                      # Screenshot gallery
+└── .github/workflows/         # CI (analyze) + release (signed APKs on v*)
 ```
 
 ## Quick start
@@ -29,6 +82,31 @@ torrex/
    ```
 3. In the app's **Settings** screen, paste the backend URL + Jackett API key.
 4. Search.
+
+### Demo mode (no backend needed)
+
+Set the Settings → Base URL field to `demo` (or open the web build with
+`?demo=1`). The app skips network calls and shows a small hardcoded sample
+so you can preview the UI end-to-end. Every screenshot above is captured
+this way.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph App["Flutter app"]
+        UI["UI · WolwoLoom 0.3.4<br/>(WlmAppScaffold, WlmCard, WlmChip, WlmSpecRow…)"]
+        ST["State · ChangeNotifier<br/>(SettingsStore)"]
+        NET["Networking · Dio + xml<br/>(TorznabClient)"]
+        STG["Storage · shared_preferences + flutter_secure_storage"]
+        LAU["Magnet open · url_launcher"]
+    end
+
+    UI --> ST
+    UI --> NET
+    ST --> STG
+    UI --> LAU
+```
 
 ## Screens
 
@@ -46,8 +124,19 @@ torrex/
 
 ## Releases
 
+```mermaid
+flowchart LR
+    DEV["git tag v0.1.0<br/>git push origin v0.1.0"] --> GH["GitHub Actions<br/>(release.yml)"]
+    GH --> B1["Build APK arm64-v8a"]
+    GH --> B2["Build APK armeabi-v7a"]
+    GH --> B3["Build APK x86_64"]
+    GH --> B4["Build APK universal"]
+    B1 & B2 & B3 & B4 --> SIGN["Sign with<br/>ANDROID_KEYSTORE_*<br/>secrets"]
+    SIGN --> REL["GitHub Release<br/>(attached APKs)"]
+```
+
 CI publishes signed APKs on every `v*` tag — see
-[`.github/workflows/release.yml`](.github/workflows/release.yml). To cut a
+[.github/workflows/release.yml](.github/workflows/release.yml). To cut a
 release:
 
 ```pwsh

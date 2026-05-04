@@ -27,7 +27,8 @@ class SettingsStore extends ChangeNotifier {
   String get apiKey => _apiKey;
   ThemeMode get themeMode => _themeMode;
 
-  bool get isConfigured => _baseUrl.isNotEmpty && _apiKey.isNotEmpty;
+  bool get isConfigured =>
+      _baseUrl == 'demo' || (_baseUrl.isNotEmpty && _apiKey.isNotEmpty);
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();

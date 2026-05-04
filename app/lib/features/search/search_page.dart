@@ -28,6 +28,16 @@ class _SearchPageState extends State<SearchPage> {
   _SortBy _sort = _SortBy.seeders;
 
   @override
+  void initState() {
+    super.initState();
+    // In demo mode, auto-populate the result list on first build so the
+    // home screen looks alive without typing a query.
+    if (widget.settings.baseUrl == 'demo') {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _runSearch());
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -35,7 +45,8 @@ class _SearchPageState extends State<SearchPage> {
 
   Future<void> _runSearch() async {
     final query = _controller.text.trim();
-    if (query.isEmpty) return;
+    final isDemo = widget.settings.baseUrl == 'demo';
+    if (query.isEmpty && !isDemo) return;
 
     if (!widget.settings.isConfigured) {
       setState(() {
