@@ -19,7 +19,7 @@ fi
 # 1. Wait for Jackett to be reachable. Cap at ~3min.
 echo "[torrex-seed] waiting for Jackett..."
 for i in $(seq 1 90); do
-    if curl -fsS "$BASE/api/v2.0/server/config" -H "X-Api-Key: $API_KEY" >/dev/null 2>&1; then
+    if curl -fsS "$BASE/api/v2.0/server/config?apikey=$API_KEY" >/dev/null 2>&1; then
         echo "[torrex-seed] Jackett is up after ${i}s"
         break
     fi
@@ -42,14 +42,13 @@ while IFS= read -r line; do
     fi
 
     echo "[torrex-seed] configuring $id..."
-    schema=$(curl -fsS "$BASE/api/v2.0/indexers/$id/config" -H "X-Api-Key: $API_KEY") || {
+    schema=$(curl -fsSL "$BASE/api/v2.0/indexers/$id/config?apikey=$API_KEY") || {
         echo "[torrex-seed]   ! could not fetch schema for $id"
         continue
     }
 
-    resp_code=$(curl -s -o /tmp/seed-resp -w "%{http_code}" -X POST \
-        "$BASE/api/v2.0/indexers/$id/config" \
-        -H "X-Api-Key: $API_KEY" \
+    resp_code=$(curl -sL -o /tmp/seed-resp -w "%{http_code}" -X POST \
+        "$BASE/api/v2.0/indexers/$id/config?apikey=$API_KEY" \
         -H "Content-Type: application/json" \
         -d "$schema")
     if [ "$resp_code" = "204" ] || [ "$resp_code" = "200" ]; then

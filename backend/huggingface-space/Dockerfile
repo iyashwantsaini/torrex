@@ -2,6 +2,12 @@
 # all the indexer cardigans and gets weekly updates.
 FROM lscr.io/linuxserver/jackett:latest
 
+# curl is needed by the seed service and isn't always present in the base.
+USER root
+RUN ( command -v apt-get >/dev/null && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/* ) \
+ || ( command -v apk >/dev/null && apk add --no-cache curl ca-certificates ) \
+ || true
+
 # HF Spaces injects a non-root user; the LinuxServer image uses s6-overlay and
 # expects to be PID 1 as root, which Spaces allows for Docker SDK images. We
 # only need to make sure config/downloads paths are world-writable so the
