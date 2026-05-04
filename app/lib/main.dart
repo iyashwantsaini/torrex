@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'core/backend_warmer.dart';
 import 'core/demo_results.dart';
 import 'core/settings_store.dart';
 import 'features/detail/detail_page.dart';
@@ -11,7 +12,26 @@ Future<void> main() async {
   final settings = SettingsStore();
   await settings.load();
   await _maybeApplyUrlOverrides(settings);
-  runApp(TorrexApp(settings: settings, initialRoute: _routeFromUrl()));
+  final warmer = BackendWarmer();
+  // Fire-and-forget — the UI shows a banner while this is in flight.
+  // Hugging Face Spaces sleep after ~48h; this hides the cold start
+  // behind whatever the user is doing on the home screen.
+  // ignore: discarded_futures
+  warmer.warm(settings);
+  // Re-warm whenever the user saves a new backend URL in Settings.
+  String lastBase = settings.baseUrl;
+  settings.addListener(() {
+    if (settings.baseUrl != lastBase) {
+      lastBase = settings.baseUrl;
+      // ignore: discarded_futures
+      warmer.warm(settings);
+    }
+  });
+  runApp(TorrexApp(
+    settings: settings,
+    warmer: warmer,
+    initialRoute: _routeFromUrl(),
+  ));
 }
 
 /// On web, allow `?demo=1` and `?page=...` URL parameters to drive the app
@@ -47,10 +67,12 @@ class InitialRouteApplier extends StatefulWidget {
     super.key,
     required this.route,
     required this.settings,
+    required this.warmer,
   });
 
   final InitialRoute route;
   final SettingsStore settings;
+  final BackendWarmer warmer;
 
   @override
   State<InitialRouteApplier> createState() => _InitialRouteApplierState();
@@ -76,6 +98,7 @@ class _InitialRouteApplierState extends State<InitialRouteApplier> {
   @override
   Widget build(BuildContext context) => AppShell(
         settings: widget.settings,
+        warmer: widget.warmer,
         initialIndex: widget.route == InitialRoute.settings ? 1 : 0,
       );
 }

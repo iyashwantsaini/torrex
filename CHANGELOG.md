@@ -7,6 +7,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.1.2] – 2026-05-05
+
+#### Added
+- **Backend warm-up on launch.** Fires a cheap `GET /UI/Dashboard` against
+  the configured backend at app start so Hugging Face Spaces (which sleep
+  after ~48h idle and take ~30s to spin up) are awake by the time the
+  user hits Search. A thin info banner — “Waking backend…” — is shown
+  above the body while the ping is in flight and disappears once the
+  Space responds. Re-runs whenever the Base URL is changed in Settings.
+  Skipped entirely in demo mode or when no backend is configured.
+
 ### [0.1.1] – 2026-05-05
 
 #### Fixed
