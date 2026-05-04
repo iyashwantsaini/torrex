@@ -2,10 +2,13 @@
 # all the indexer cardigans and gets weekly updates.
 FROM lscr.io/linuxserver/jackett:latest
 
-# curl is needed by the seed service and isn't always present in the base.
+# curl + python3 are needed by the init/seed scripts and aren't always
+# present in the base image. python3 is used to compute Jackett's
+# AdminPassword hash (SHA512 over UTF-16LE), which busybox iconv handles
+# inconsistently across Alpine versions.
 USER root
-RUN ( command -v apt-get >/dev/null && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/* ) \
- || ( command -v apk >/dev/null && apk add --no-cache curl ca-certificates ) \
+RUN ( command -v apt-get >/dev/null && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates python3 && rm -rf /var/lib/apt/lists/* ) \
+ || ( command -v apk >/dev/null && apk add --no-cache curl ca-certificates python3 ) \
  || true
 
 # HF Spaces injects a non-root user; the LinuxServer image uses s6-overlay and

@@ -33,17 +33,22 @@ if [ -z "$API_KEY" ]; then
 fi
 
 # Compute Jackett's password hash if a password is provided.
+# Jackett uses: SHA512( UTF-16LE(InstanceId + plain) ) as uppercase hex.
+# We re-use the API key as InstanceId so it's a stable known salt.
 PWD_HASH=""
 if [ -n "$ADMIN_PWD" ]; then
-    if command -v iconv >/dev/null && command -v openssl >/dev/null; then
-        PWD_HASH=$(printf '%s' "${API_KEY}${ADMIN_PWD}" \
-            | iconv -f UTF-8 -t UTF-16LE \
-            | openssl dgst -sha512 -hex \
-            | awk '{print $NF}' \
-            | tr 'a-f' 'A-F')
-        echo "[torrex-init] computed admin password hash"
+    if command -v python3 >/dev/null; then
+        PWD_HASH=$(python3 - <<PY
+import hashlib, os
+salt = os.environ['JACKETT_API_KEY']
+pwd  = os.environ['JACKETT_ADMIN_PASSWORD']
+h = hashlib.sha512((salt + pwd).encode('utf-16le')).hexdigest().upper()
+print(h)
+PY
+)
+        echo "[torrex-init] computed admin password hash (len=${#PWD_HASH})"
     else
-        echo "[torrex-init] iconv/openssl missing - cannot pre-hash password"
+        echo "[torrex-init] python3 missing - cannot pre-hash password"
     fi
 fi
 
