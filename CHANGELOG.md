@@ -5,6 +5,17 @@ All notable changes to Torrex are recorded here.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Web (Vercel deployment)
+
+### [vercel-v1] – 2026-05-05
+
+#### Added
+- `vercel.json` + `scripts/vercel-install.sh` + `scripts/vercel-build.sh`
+  for one-click Vercel deployment of the Flutter web build. Installs
+  pinned Flutter (3.41.9), runs `flutter build web --release --wasm` for
+  best fidelity, serves `app/build/web` as a static SPA with immutable
+  caching for hashed assets and SPA-style rewrite to `/index.html`.
+
 ## App
 
 ### [0.1.3] – 2026-05-05

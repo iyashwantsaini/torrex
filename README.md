@@ -186,6 +186,36 @@ Full walkthrough in [backend/README.md](backend/README.md).
 | Storage     | shared_preferences + secure_storage |
 | Magnet open | url_launcher (`magnet:` intent)     |
 
+## Web build (Vercel)
+
+The Flutter web target builds from the same codebase and runs on Vercel's
+free Hobby tier. Search, sort, filter, detail view, settings, and the
+backend warm-up banner all work identically to the APK; magnet links are
+handed to whatever desktop torrent client the user has registered for the
+`magnet:` protocol.
+
+Deployment is fully automated via [`vercel.json`](vercel.json) plus two
+shell scripts:
+
+- [`scripts/vercel-install.sh`](scripts/vercel-install.sh) — installs
+  Flutter (cached across builds in `$HOME`).
+- [`scripts/vercel-build.sh`](scripts/vercel-build.sh) — runs
+  `flutter build web --release --wasm` and Vercel publishes
+  `app/build/web` as the static site.
+
+One-time setup:
+
+1. Sign in at <https://vercel.com> with GitHub (free Hobby plan).
+2. **Add New → Project → Import** the `torrex` repo. Accept defaults
+   — Vercel reads `vercel.json` and ignores its framework presets.
+3. Vercel auto-deploys every push to `main` and gives you a
+   `https://<project>.vercel.app` URL. Pull requests get preview URLs.
+
+Users visiting the deployed site enter their own backend URL + API key in
+Settings (the values are persisted to encrypted IndexedDB via
+`flutter_secure_storage`'s web backend). They can also append `?demo=1`
+to preview the UI without a backend.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
