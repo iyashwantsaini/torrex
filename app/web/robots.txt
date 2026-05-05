@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://torrex.vercel.app/sitemap.xml

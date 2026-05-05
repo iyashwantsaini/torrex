@@ -6,6 +6,9 @@ Talks to any **Torznab**-compatible backend (Jackett or Prowlarr), so a single
 search hits every indexer you've configured — and a tap on a result hands the
 magnet link to whatever torrent client you have installed.
 
+- **Live web build:** <https://torrex.vercel.app>
+- **Android APKs:** <https://github.com/iyashwantsaini/torrex/releases/latest>
+
 > ⚠️ Torrex is metadata only. It searches public Torznab indexers and hands
 > magnet links to whatever torrent client you have installed. It does not
 > download or seed anything itself. Use it for legal content only.
@@ -215,6 +218,8 @@ Users visiting the deployed site enter their own backend URL + API key in
 Settings (the values are persisted to encrypted IndexedDB via
 `flutter_secure_storage`'s web backend). They can also append `?demo=1`
 to preview the UI without a backend.
+
+Live at <https://torrex.vercel.app>.
 
 ## License
 

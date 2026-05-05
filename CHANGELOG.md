@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## Web (Vercel deployment)
 
+### [vercel-v2] – 2026-05-05
+
+#### Live
+- Production URL: <https://torrex.vercel.app>
+
 ### [vercel-v1] – 2026-05-05
 
 #### Added
@@ -17,6 +22,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   caching for hashed assets and SPA-style rewrite to `/index.html`.
 
 ## App
+
+### [0.1.4] – 2026-05-05
+
+#### Added
+- Mobile-web-only callout linking to the latest GitHub APK release.
+  Mobile browsers can’t open `magnet:` links, so the Android APK is a
+  much better experience there. Dismissible; only shown on web at
+  viewport widths < 600px.
+- Polished `web/index.html`: real `<title>`, meta description, Open
+  Graph + Twitter card tags, canonical link, theme-color, lang attr.
+- Polished `web/manifest.json`: proper name, scope, description,
+  matching theme/background colors. Cleaner PWA install prompt.
+- `robots.txt` + `sitemap.xml` for the Vercel deployment.
 
 ### [0.1.3] – 2026-05-05
 

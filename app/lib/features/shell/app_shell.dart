@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:wolwoloom/wolwoloom.dart';
 
 import '../../core/backend_warmer.dart';
@@ -24,6 +26,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   late int _index = widget.initialIndex;
+  bool _mobileWebHintDismissed = false;
 
   static const _titles = ['Torrex', 'Settings'];
 
@@ -77,6 +80,11 @@ class _AppShellState extends State<AppShell> {
             animation: widget.warmer,
             builder: (_, _) => _WarmupBanner(state: widget.warmer.state),
           ),
+          if (_shouldShowMobileWebHint(context))
+            _MobileWebHint(
+              onDismiss: () =>
+                  setState(() => _mobileWebHintDismissed = true),
+            ),
           Expanded(
             child: IndexedStack(
               index: _index,
@@ -95,6 +103,14 @@ class _AppShellState extends State<AppShell> {
       bottomNavIndex: _index,
       onBottomNavTap: (i) => setState(() => _index = i),
     );
+  }
+
+  /// Mobile browsers can't open `magnet:` links, so the web build is
+  /// noticeably worse on phones than the APK. Show a one-time hint with
+  /// a link to the GitHub Releases page — dismissible and only on web.
+  bool _shouldShowMobileWebHint(BuildContext context) {
+    if (!kIsWeb || _mobileWebHintDismissed) return false;
+    return MediaQuery.sizeOf(context).width < 600;
   }
 }
 
@@ -124,6 +140,44 @@ class _WarmupBanner extends StatelessWidget {
                     '20\u201330 seconds on first launch.',
               ),
             ),
+    );
+  }
+}
+
+/// Mobile-web-only hint: most mobile browsers can't open `magnet:` links,
+/// so the Android APK is a much better experience there. Dismissible.
+class _MobileWebHint extends StatelessWidget {
+  const _MobileWebHint({required this.onDismiss});
+
+  final VoidCallback onDismiss;
+
+  static const _releasesUrl =
+      'https://github.com/iyashwantsaini/torrex/releases/latest';
+
+  Future<void> _openReleases() async {
+    final uri = Uri.parse(_releasesUrl);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: WlmCallout(
+        tone: WlmCalloutTone.neutral,
+        title: 'On a phone? Get the Android app',
+        body:
+            'Mobile browsers usually can\u2019t open magnet links. The APK '
+            'hands them straight to your torrent client.',
+        action: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            WlmGhostButton(label: 'Dismiss', onPressed: onDismiss),
+            const SizedBox(width: 8),
+            WlmSecondaryButton(label: 'Get APK', onPressed: _openReleases),
+          ],
+        ),
+      ),
     );
   }
 }

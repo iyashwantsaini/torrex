@@ -1,12 +1,13 @@
 {
-    "name": "torrex",
-    "short_name": "torrex",
-    "start_url": ".",
+    "name": "Torrex",
+    "short_name": "Torrex",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#0E0E10",
-    "theme_color": "#989EDC",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "theme_color": "#0E0E10",
+    "description": "A clean Flutter front-end for your Jackett / Prowlarr backend. One search hits every indexer you've configured.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {
