@@ -12,8 +12,13 @@ export PATH="$HOME/flutter/bin:$PATH"
 
 cd app
 
-echo "==> Building Flutter web (release, wasm)"
-flutter build web --release --wasm --base-href /
+# NOTE: --wasm is intentionally OFF.
+# `flutter_secure_storage_web` 1.2.1 still imports `dart:html`, which the
+# dart2wasm compiler doesn't support. The standard CanvasKit/JS build is
+# fully featured and visually identical for our use case. Revisit once
+# flutter_secure_storage_web is upgraded to its `package:web` based 2.x.
+echo "==> Building Flutter web (release, CanvasKit)"
+flutter build web --release --base-href /
 
 echo "==> Build artefacts:"
 ls -lah build/web | head -n 30
