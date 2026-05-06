@@ -86,12 +86,32 @@ torrex/
 3. In the app's **Settings** screen, paste the backend URL + Jackett API key.
 4. Search.
 
-### Demo mode (no backend needed)
+### Demo mode (local / debug only)
 
-Set the Settings → Base URL field to `demo` (or open the web build with
-`?demo=1`). The app skips network calls and shows a small hardcoded sample
-so you can preview the UI end-to-end. Every screenshot above is captured
-this way.
+Demo mode lets you browse the UI with built-in fake results — no backend
+needed. It is **only available in debug builds** (i.e. `flutter run`) and
+is **stripped from production / Vercel builds** so public visitors at
+<https://torrex.vercel.app> never see canned results that look real.
+
+To use it locally:
+
+- Run a debug build: `cd app && flutter run -d chrome` (or any device).
+- The onboarding wizard exposes a **"Try the demo"** card; or in
+  Settings, tap **"Try demo backend"**.
+- To exit, hit **"Exit demo"** in the demo callout at the top of
+  Settings.
+
+Behind the scenes the demo gate is the compile-time constant
+`kAllowDemo` in [`app/lib/core/build_flags.dart`](app/lib/core/build_flags.dart).
+It defaults to `kDebugMode`. To force-enable demo in a release build
+(e.g. for screenshots), pass `--dart-define=ALLOW_DEMO=true`:
+
+```bash
+flutter build web --release --dart-define=ALLOW_DEMO=true
+```
+
+The Vercel build script ([`scripts/vercel-build.sh`](scripts/vercel-build.sh))
+intentionally does **not** pass that flag.
 
 ## Architecture
 

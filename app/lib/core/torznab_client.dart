@@ -37,6 +37,7 @@ class TorznabClient {
     required String query,
     String indexer = 'all',
     int limit = 100,
+    bool extended = false,
   }) async {
     if (baseUrl == DemoResults.triggerUrl) {
       // Local preview / screenshot mode — no network call.
@@ -55,6 +56,7 @@ class TorznabClient {
           't': 'search',
           'q': query,
           'limit': limit,
+          if (extended) 'extended': 1,
         },
       );
     } on DioException catch (e) {
@@ -80,6 +82,40 @@ class TorznabClient {
     }
 
     return doc.findAllElements('item').map(_parseItem).toList(growable: false);
+  }
+
+  /// List the configured indexers (ones the user has set up in Jackett's
+  /// admin UI). Used by the Settings → Indexer dropdown so users don't
+  /// have to type slugs by hand. Returns an empty list on error so
+  /// callers can fall back to free-text input.
+  Future<List<JackettIndexer>> listIndexers({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    if (baseUrl.isEmpty || apiKey.isEmpty) return const [];
+    if (baseUrl == DemoResults.triggerUrl) return const [];
+    final trimmed = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final url = '$trimmed/api/v2.0/indexers';
+    try {
+      final resp = await _dio.get<dynamic>(
+        url,
+        queryParameters: {'apikey': apiKey, 'configured': true},
+        options: Options(
+          responseType: ResponseType.json,
+          headers: {'Accept': 'application/json'},
+        ),
+      );
+      final data = resp.data;
+      if (data is! List) return const [];
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(JackettIndexer.fromJson)
+          .toList(growable: false);
+    } on DioException {
+      return const [];
+    }
   }
 
   static String _buildUrl(String baseUrl, String indexer) {
@@ -143,6 +179,20 @@ class TorznabClient {
         : (link.startsWith('magnet:') ? link : '');
     final downloadUrl = link.startsWith('magnet:') ? '' : link;
 
+    // Extended attributes (only present when the caller passed `extended=1`
+    // AND the indexer supports them). All fall back to empty / empty list.
+    final infoHash = torznabAttr('infohash') ?? '';
+    final imdbId = torznabAttr('imdb') ?? torznabAttr('imdbid') ?? '';
+    final tmdbId = torznabAttr('tmdb') ?? torznabAttr('tmdbid') ?? '';
+    final tvdbId = torznabAttr('tvdb') ?? torznabAttr('tvdbid') ?? '';
+    final coverUrl = torznabAttr('coverurl') ??
+        torznabAttr('cover') ??
+        torznabAttr('poster') ??
+        '';
+
+    final files = _collectFiles(item);
+    final trackers = _collectMulti(item, 'tracker');
+
     return TorrentResult(
       title: title,
       indexer: indexer,
@@ -154,7 +204,69 @@ class TorznabClient {
       downloadUrl: downloadUrl,
       detailsUrl: detailsUrl,
       category: category,
+      infoHash: infoHash,
+      imdbId: imdbId,
+      tmdbId: tmdbId,
+      tvdbId: tvdbId,
+      coverUrl: coverUrl,
+      files: files,
+      trackers: trackers,
     );
+  }
+
+  /// Collect every value of a repeated `<torznab:attr name="X">` (or the
+  /// unprefixed `<attr>` variant). Order preserved.
+  static List<String> _collectMulti(XmlElement item, String name) {
+    final out = <String>[];
+    void scan(Iterable<XmlElement> els) {
+      for (final el in els) {
+        if (el.getAttribute('name') == name) {
+          final v = el.getAttribute('value');
+          if (v != null && v.isNotEmpty) out.add(v);
+        }
+      }
+    }
+    scan(item.findAllElements('torznab:attr'));
+    scan(item.findAllElements('attr'));
+    return out;
+  }
+
+  /// Heuristic file-list extractor. Different indexers expose this very
+  /// differently, so we try a few shapes:
+  ///
+  /// 1. Repeated `<torznab:attr name="filename" value="...">` paired with
+  ///    `<torznab:attr name="filesize" value="...">` (RARBG-style).
+  /// 2. Single `<torznab:attr name="files">` whose value is an integer
+  ///    file-count (no per-file detail).
+  /// 3. Custom `<files>` child with nested `<file name=".." size="..">`.
+  ///
+  /// Returns an empty list when none match — UI hides the section then.
+  static List<TorrentFile> _collectFiles(XmlElement item) {
+    final names = _collectMulti(item, 'filename');
+    if (names.isNotEmpty) {
+      final sizes = _collectMulti(item, 'filesize');
+      return [
+        for (var i = 0; i < names.length; i++)
+          TorrentFile(
+            name: names[i],
+            bytes: i < sizes.length ? int.tryParse(sizes[i]) : null,
+          ),
+      ];
+    }
+    final filesEl = item.findElements('files').firstOrNull;
+    if (filesEl != null) {
+      final out = <TorrentFile>[];
+      for (final f in filesEl.findElements('file')) {
+        final n = f.getAttribute('name') ?? f.innerText.trim();
+        if (n.isEmpty) continue;
+        out.add(TorrentFile(
+          name: n,
+          bytes: int.tryParse(f.getAttribute('size') ?? ''),
+        ));
+      }
+      if (out.isNotEmpty) return out;
+    }
+    return const [];
   }
 
   static DateTime? _tryParseRfc822(String input) {
@@ -207,4 +319,26 @@ class TorznabException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+/// One configured indexer as reported by Jackett's `/api/v2.0/indexers`.
+class JackettIndexer {
+  const JackettIndexer({
+    required this.id,
+    required this.name,
+    this.type = '',
+    this.description = '',
+  });
+
+  final String id;
+  final String name;
+  final String type;
+  final String description;
+
+  factory JackettIndexer.fromJson(Map<String, dynamic> json) => JackettIndexer(
+        id: (json['id'] ?? '').toString(),
+        name: (json['name'] ?? json['id'] ?? '').toString(),
+        type: (json['type'] ?? '').toString(),
+        description: (json['description'] ?? '').toString(),
+      );
 }

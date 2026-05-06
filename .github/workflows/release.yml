@@ -1,11 +1,12 @@
-name: Build and Release APKs
+name: Build and Release (APKs + Web)
 
 # Triggers:
 #   - push of any tag starting with `v` (e.g. `v0.1.0`) → publishes a release
 #   - manual dispatch                                   → builds without publishing
 #
 # Builds:
-#   - app/ — split-per-abi + universal
+#   - app/ Android — split-per-abi + universal APKs
+#   - app/ Web     — release web bundle, zipped
 #
 # APKs are signed with the debug key by default. To get upgrade-compatible
 # signed APKs add these repo secrets and the workflow will pick them up
@@ -34,7 +35,7 @@ env:
 
 jobs:
   build:
-    name: Build APKs
+    name: Build APKs + Web
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -141,6 +142,20 @@ jobs:
           fi
           ls -la release-apks/
 
+      # ── Build web ───────────────────────────────────────────
+      # Demo mode is intentionally NOT enabled (kAllowDemo defaults to
+      # false in release). Mirrors scripts/vercel-build.sh.
+      - name: Build web (release)
+        working-directory: app
+        run: flutter build web --release --base-href /
+
+      - name: Package web bundle
+        run: |
+          V=${{ steps.version.outputs.version }}
+          mkdir -p release-web
+          (cd app/build/web && zip -r "$GITHUB_WORKSPACE/release-web/torrex-v${V}-web.zip" .)
+          ls -la release-web/
+
       # ── Release notes ────────────────────────────────────────
       - name: Generate release notes
         if: startsWith(github.ref, 'refs/tags/v')
@@ -169,6 +184,7 @@ jobs:
               echo ""
               echo "- **\`torrex-v*-arm64-v8a.apk\`** — recommended for nearly every modern phone."
               echo "- **\`torrex-v*-universal.apk\`** — works on any architecture (larger)."
+              echo "- **\`torrex-v*-web.zip\`** — static web bundle. Unzip and serve any subfolder, or just open the live build at <https://torrex.vercel.app>."
               echo ""
               echo "After installing, open Settings inside the app and paste your Jackett / Prowlarr URL + API key."
               echo "See [backend/huggingface-space/README.md](https://github.com/${{ github.repository }}/blob/main/backend/huggingface-space/README.md) to stand one up for free."
@@ -183,6 +199,13 @@ jobs:
           path: release-apks/*.apk
           if-no-files-found: error
 
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: torrex-v${{ steps.version.outputs.version }}-web
+          path: release-web/*.zip
+          if-no-files-found: error
+
       - name: Create / update GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -190,10 +213,10 @@ jobs:
           V: ${{ steps.version.outputs.version }}
         run: |
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" release-apks/*.apk --clobber
+            gh release upload "v$V" release-apks/*.apk release-web/*.zip --clobber
             gh release edit   "v$V" --notes-file release-notes.md --draft=false --latest
           else
-            gh release create "v$V" release-apks/*.apk \
+            gh release create "v$V" release-apks/*.apk release-web/*.zip \
               --title "Torrex v$V" \
               --notes-file release-notes.md \
               --latest

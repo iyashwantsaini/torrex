@@ -1,10 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:wolwoloom/wolwoloom.dart';
 
 import '../../core/backend_warmer.dart';
 import '../../core/settings_store.dart';
+import '../../models/torrent_result.dart';
+import '../../widgets/theme_toggle_button.dart';
+import '../detail/detail_page.dart';
+import '../discover/discover_page.dart';
 import '../search/search_page.dart';
 import '../settings/settings_page.dart';
 
@@ -26,52 +28,60 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   late int _index = widget.initialIndex;
-  bool _mobileWebHintDismissed = false;
 
-  static const _titles = ['Torrex', 'Settings'];
+  /// Currently-selected result on wide screens. Null means "show empty
+  /// placeholder in the right pane". On narrow screens we ignore this and
+  /// push DetailPage as a route instead.
+  TorrentResult? _selectedResult;
 
-  IconData _themeIcon() {
-    switch (widget.settings.themeMode) {
-      case ThemeMode.light:
-        return Icons.wb_sunny_outlined;
-      case ThemeMode.dark:
-        return Icons.dark_mode_outlined;
-      case ThemeMode.system:
-        return Icons.brightness_auto_outlined;
-    }
-  }
+  /// Lets us reach into the SearchPage to pre-fill a query when the user
+  /// taps "Find torrents" inside the Discover tab.
+  final _searchKey = GlobalKey<SearchPageState>();
 
-  String _themeTooltip() {
-    switch (widget.settings.themeMode) {
-      case ThemeMode.light:
-        return 'Theme: light \u00b7 tap for dark';
-      case ThemeMode.dark:
-        return 'Theme: dark \u00b7 tap for system';
-      case ThemeMode.system:
-        return 'Theme: system \u00b7 tap for light';
-    }
-  }
-
-  void _cycleTheme() {
-    final next = switch (widget.settings.themeMode) {
-      ThemeMode.system => ThemeMode.light,
-      ThemeMode.light => ThemeMode.dark,
-      ThemeMode.dark => ThemeMode.system,
-    };
-    widget.settings.update(themeMode: next);
-  }
+  static const _titles = ['Torrex', 'Movies & TV', 'Settings'];
+  static const _wideBreakpoint = 900.0;
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isWide = width >= _wideBreakpoint;
+    final scheme = Theme.of(context).colorScheme;
+
+    // On wide screens, tapping a result updates the inline detail pane
+    // instead of pushing a new route.
+    final searchPage = SearchPage(
+      key: _searchKey,
+      settings: widget.settings,
+      onSelect: isWide
+          ? (r) => setState(() => _selectedResult = r)
+          : null,
+    );
+
+    final searchPane = isWide && _index == 0
+        ? Row(
+            children: [
+              Expanded(flex: 5, child: searchPage),
+              VerticalDivider(width: 1, color: scheme.outlineVariant),
+              Expanded(
+                flex: 6,
+                child: _selectedResult == null
+                    ? _DetailPlaceholder(scheme: scheme)
+                    : DetailPage(
+                        key: ValueKey(_selectedResult!.bestUri),
+                        result: _selectedResult!,
+                        settings: widget.settings,
+                        embedded: true,
+                      ),
+              ),
+            ],
+          )
+        : searchPage;
+
     return WlmAppScaffold(
       appBar: WlmAppBar(
         title: _titles[_index],
         actions: [
-          WlmHeaderIconButton(
-            icon: _themeIcon(),
-            tooltip: _themeTooltip(),
-            onPressed: _cycleTheme,
-          ),
+          ThemeToggleButton(settings: widget.settings),
         ],
       ),
       body: Column(
@@ -80,16 +90,16 @@ class _AppShellState extends State<AppShell> {
             animation: widget.warmer,
             builder: (_, _) => _WarmupBanner(state: widget.warmer.state),
           ),
-          if (_shouldShowMobileWebHint(context))
-            _MobileWebHint(
-              onDismiss: () =>
-                  setState(() => _mobileWebHintDismissed = true),
-            ),
           Expanded(
             child: IndexedStack(
               index: _index,
               children: [
-                SearchPage(settings: widget.settings),
+                searchPane,
+                DiscoverPage(
+                  settings: widget.settings,
+                  onOpenSettings: () => setState(() => _index = 2),
+                  onFindTorrents: _findTorrents,
+                ),
                 SettingsPage(settings: widget.settings),
               ],
             ),
@@ -98,6 +108,7 @@ class _AppShellState extends State<AppShell> {
       ),
       bottomNav: const [
         WlmNavItem(icon: Icons.search_outlined, label: 'Search'),
+        WlmNavItem(icon: Icons.movie_outlined, label: 'Movies & TV'),
         WlmNavItem(icon: Icons.tune_outlined, label: 'Settings'),
       ],
       bottomNavIndex: _index,
@@ -105,12 +116,15 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  /// Mobile browsers can't open `magnet:` links, so the web build is
-  /// noticeably worse on phones than the APK. Show a one-time hint with
-  /// a link to the GitHub Releases page — dismissible and only on web.
-  bool _shouldShowMobileWebHint(BuildContext context) {
-    if (!kIsWeb || _mobileWebHintDismissed) return false;
-    return MediaQuery.sizeOf(context).width < 600;
+  /// Bridge from the Discover tab back to the Search tab. Switches index
+  /// then nudges the SearchPage state to run the query.
+  void _findTorrents(String query) {
+    setState(() => _index = 0);
+    // Wait for IndexedStack to surface the search pane so its state is
+    // attached before we poke it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchKey.currentState?.runQuery(query);
+    });
   }
 }
 
@@ -144,37 +158,30 @@ class _WarmupBanner extends StatelessWidget {
   }
 }
 
-/// Mobile-web-only hint: most mobile browsers can't open `magnet:` links,
-/// so the Android APK is a much better experience there. Dismissible.
-class _MobileWebHint extends StatelessWidget {
-  const _MobileWebHint({required this.onDismiss});
-
-  final VoidCallback onDismiss;
-
-  static const _releasesUrl =
-      'https://github.com/iyashwantsaini/torrex/releases/latest';
-
-  Future<void> _openReleases() async {
-    final uri = Uri.parse(_releasesUrl);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
+/// Empty-state shown in the right pane on wide screens before the user has
+/// picked a result. Kept intentionally bare — a single hint, no chrome.
+class _DetailPlaceholder extends StatelessWidget {
+  const _DetailPlaceholder({required this.scheme});
+  final ColorScheme scheme;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: WlmCallout(
-        tone: WlmCalloutTone.neutral,
-        title: 'On a phone? Get the Android app',
-        body:
-            'Mobile browsers usually can\u2019t open magnet links. The APK '
-            'hands them straight to your torrent client.',
-        action: Row(
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            WlmGhostButton(label: 'Dismiss', onPressed: onDismiss),
-            const SizedBox(width: 8),
-            WlmSecondaryButton(label: 'Get APK', onPressed: _openReleases),
+            Icon(Icons.touch_app_outlined,
+                size: 36, color: scheme.outline),
+            const SizedBox(height: 12),
+            Text(
+              'Pick a result to see its details here.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.outline,
+                  ),
+            ),
           ],
         ),
       ),

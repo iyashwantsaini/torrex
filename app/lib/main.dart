@@ -5,6 +5,7 @@ import 'core/backend_warmer.dart';
 import 'core/demo_results.dart';
 import 'core/settings_store.dart';
 import 'features/detail/detail_page.dart';
+import 'features/onboarding/onboarding_page.dart';
 import 'features/shell/app_shell.dart';
 
 Future<void> main() async {
@@ -87,6 +88,10 @@ class InitialRouteApplier extends StatefulWidget {
 }
 
 class _InitialRouteApplierState extends State<InitialRouteApplier> {
+  // Forces a rebuild after the user finishes (or skips) the wizard so the
+  // home swaps from OnboardingPage → AppShell.
+  bool _onboardingFinished = false;
+
   @override
   void initState() {
     super.initState();
@@ -95,8 +100,10 @@ class _InitialRouteApplierState extends State<InitialRouteApplier> {
         if (!mounted) return;
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) =>
-                DetailPage(result: DemoResults.forQuery('').first),
+            builder: (_) => DetailPage(
+              result: DemoResults.forQuery('').first,
+              settings: widget.settings,
+            ),
           ),
         );
       });
@@ -104,9 +111,24 @@ class _InitialRouteApplierState extends State<InitialRouteApplier> {
   }
 
   @override
-  Widget build(BuildContext context) => AppShell(
+  Widget build(BuildContext context) {
+    // Show onboarding only on a true first launch (no saved creds AND
+    // wizard never completed). Honors `?page=` deep links by skipping
+    // the wizard when an explicit route was requested.
+    final mustOnboard = !_onboardingFinished &&
+        !widget.settings.onboardingDone &&
+        !widget.settings.isConfigured &&
+        widget.route == InitialRoute.search;
+    if (mustOnboard) {
+      return OnboardingPage(
         settings: widget.settings,
-        warmer: widget.warmer,
-        initialIndex: widget.route == InitialRoute.settings ? 1 : 0,
+        onFinished: () => setState(() => _onboardingFinished = true),
       );
+    }
+    return AppShell(
+      settings: widget.settings,
+      warmer: widget.warmer,
+      initialIndex: widget.route == InitialRoute.settings ? 1 : 0,
+    );
+  }
 }

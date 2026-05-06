@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:wolwoloom/wolwoloom.dart';
 
+import '../../core/build_flags.dart';
 import '../../core/formatters.dart';
 import '../../core/settings_store.dart';
 import '../../core/torznab_client.dart';
@@ -10,19 +11,24 @@ import '../../models/torrent_result.dart';
 import '../detail/detail_page.dart';
 
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key, required this.settings});
+  const SearchPage({super.key, required this.settings, this.onSelect});
 
   final SettingsStore settings;
 
+  /// When non-null, tapping a result calls this instead of pushing a new
+  /// route. Used by the wide-screen two-pane shell so the detail view stays
+  /// inline.
+  final ValueChanged<TorrentResult>? onSelect;
+
   @override
-  State<SearchPage> createState() => _SearchPageState();
+  State<SearchPage> createState() => SearchPageState();
 }
 
 enum _SortBy { seeders, size, date }
 
 const int _pageSize = 10;
 
-class _SearchPageState extends State<SearchPage> {
+class SearchPageState extends State<SearchPage> {
   final _client = TorznabClient();
   final _controller = TextEditingController();
 
@@ -32,19 +38,47 @@ class _SearchPageState extends State<SearchPage> {
   _SortBy _sort = _SortBy.seeders;
   bool _onlyMagnet = false;
   int _page = 1;
+  String _lastBaseUrl = '';
 
   @override
   void initState() {
     super.initState();
+    _lastBaseUrl = widget.settings.baseUrl;
+    widget.settings.addListener(_onSettingsChanged);
     if (widget.settings.baseUrl == 'demo') {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runSearch());
     }
   }
 
+  /// Drop stale results when the user switches backends from Settings
+  /// (e.g. exits demo). Otherwise the old demo cards linger in the
+  /// list, which looks like a bug.
+  void _onSettingsChanged() {
+    final base = widget.settings.baseUrl;
+    if (base == _lastBaseUrl) return;
+    _lastBaseUrl = base;
+    if (!mounted) return;
+    setState(() {
+      _all = const [];
+      _error = null;
+      _page = 1;
+      _controller.clear();
+    });
+  }
+
   @override
   void dispose() {
+    widget.settings.removeListener(_onSettingsChanged);
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Public hook used by AppShell when the user taps "Find torrents" on
+  /// a TMDB media page. Sets the input field and immediately runs the
+  /// search so the user lands on a populated results list.
+  void runQuery(String query) {
+    _controller.text = query;
+    _runSearch();
   }
 
   Future<void> _runSearch() async {
@@ -72,6 +106,9 @@ class _SearchPageState extends State<SearchPage> {
         apiKey: widget.settings.apiKey,
         indexer: widget.settings.indexer,
         query: query,
+        // Pull files / trackers / coverurl in the same round-trip so the
+        // detail page can render them without a second backend call.
+        extended: true,
       );
       setState(() {
         _all = r;
@@ -158,14 +195,16 @@ class _SearchPageState extends State<SearchPage> {
     }
     if (_all.isEmpty) {
       if (!widget.settings.isConfigured) {
-        return const WlmEmptyState(
+        return WlmEmptyState(
           eyebrow: 'SETUP',
           icon: Icons.settings_outlined,
           title: 'Connect a backend',
-          body:
-              'Add your Jackett or Prowlarr URL and API key in Settings to '
-              'start searching. Or set Base URL to \u201cdemo\u201d to '
-              'preview the app.',
+          body: kAllowDemo
+              ? 'Add your Jackett or Prowlarr URL and API key in Settings to '
+                  'start searching. Or set Base URL to \u201cdemo\u201d to '
+                  'preview the app.'
+              : 'Add your Jackett or Prowlarr URL and API key in Settings to '
+                  'start searching.',
         );
       }
       return const WlmEmptyState(
@@ -200,6 +239,7 @@ class _SearchPageState extends State<SearchPage> {
         for (final r in slice) ...[
           _ResultCard(
             result: r,
+            chipIds: widget.settings.cardChips,
             onTap: _openDetail,
             onOpen: _openMagnet,
             onCopy: _copy,
@@ -228,8 +268,15 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _openDetail(TorrentResult r) {
+    final inline = widget.onSelect;
+    if (inline != null) {
+      inline(r);
+      return;
+    }
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => DetailPage(result: r)),
+      MaterialPageRoute(
+        builder: (_) => DetailPage(result: r, settings: widget.settings),
+      ),
     );
   }
 
@@ -327,19 +374,50 @@ class _ResultsHeader extends StatelessWidget {
 class _ResultCard extends StatelessWidget {
   const _ResultCard({
     required this.result,
+    required this.chipIds,
     required this.onTap,
     required this.onOpen,
     required this.onCopy,
   });
 
   final TorrentResult result;
+  final List<String> chipIds;
   final ValueChanged<TorrentResult> onTap;
   final ValueChanged<TorrentResult> onOpen;
   final ValueChanged<TorrentResult> onCopy;
 
+  /// Build the chip for a given preference id, or `null` to hide it
+  /// (e.g. magnet chip on a torrent without a magnet link).
+  Widget? _chipFor(String id) {
+    switch (id) {
+      case 'seeders':
+        return WlmChip(label: '\u2191 ${result.seeders}');
+      case 'leechers':
+        return WlmChip(label: '\u2193 ${result.leechers}');
+      case 'size':
+        return WlmChip(label: formatBytes(result.sizeBytes));
+      case 'age':
+        return WlmChip(label: formatRelative(result.publishDate));
+      case 'indexer':
+        if (result.indexer.isEmpty) return null;
+        return WlmChip(label: result.indexer);
+      case 'category':
+        if (result.category.isEmpty) return null;
+        return WlmChip(label: result.category);
+      case 'magnet':
+        if (!result.hasMagnet) return null;
+        return const WlmChip(label: 'magnet');
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final chips = <Widget>[
+      for (final id in chipIds) ?_chipFor(id),
+    ];
     return WlmCard(
       onTap: () => onTap(result),
       padding: const EdgeInsets.all(12),
@@ -352,19 +430,10 @@ class _ResultCard extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              WlmChip(label: '\u2191 ${result.seeders}'),
-              WlmChip(label: '\u2193 ${result.leechers}'),
-              WlmChip(label: formatBytes(result.sizeBytes)),
-              WlmChip(label: formatRelative(result.publishDate)),
-              if (result.indexer.isNotEmpty) WlmChip(label: result.indexer),
-              if (result.hasMagnet) const WlmChip(label: 'magnet'),
-            ],
-          ),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: chips),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [

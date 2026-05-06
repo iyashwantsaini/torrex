@@ -23,6 +23,95 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.2.0] – 2026-05-06
+
+#### Added
+- **Movies & TV tab** powered by TMDB. New third bottom-nav entry that
+  shows trending Movies / TV in a 2-column poster grid and lets the
+  user search the catalog directly. Tapping a card opens a detail
+  screen with backdrop, poster, overview, genres, rating, and — for
+  shows — an expandable list of seasons that lazy-loads episodes from
+  TMDB on tap. A "Find torrents" CTA bridges back to the Search tab
+  with the title pre-filled and the query already running.
+- **TMDB enrichment in result detail**. When a result looks like a
+  movie or TV episode (Torznab category 2000xxxx / 5000xxxx) and the
+  user has a TMDB key configured, the detail page renders an inline
+  card with poster, title + year, rating, and a synopsis. Non-media
+  results (software, music, ISOs) skip the lookup entirely so we never
+  waste API calls.
+- **TMDB API key** in Settings (`tmdb.apiKey`, secure storage). Free,
+  user-supplied, opt-in; never leaves the device. Includes a "How to
+  get a TMDB key" link to themoviedb.org.
+- **Customizable result-card chips**. New "Result card" section in
+  Settings lets users toggle which chips show under each search result
+  (Seeders, Leechers, Size, Age, Indexer, Category, Magnet). Order is
+  canonical so the chip row stays predictable.
+- **Extended Torznab parsing**. Search now sends `extended=1` and
+  parses additional `<torznab:attr>` values: `infohash`, `imdb`,
+  `tmdbid`, `tvdbid`, `coverurl`, plus repeated `filename` /
+  `filesize` / `tracker` pairs. The detail page renders cover art,
+  the file list (with show-more for season packs), and trackers when
+  the indexer publishes them.
+- **First-launch onboarding wizard** (`features/onboarding/onboarding_page.dart`).
+  Three steps: welcome / pick a path → enter creds (Demo skips this) →
+  done. Links to the GitHub setup guide for users who don't yet have a
+  Jackett backend. Persists `ui.onboardingDone` so it never re-shows.
+- **Indexer dropdown in Settings**. The page now calls Jackett's
+  `/api/v2.0/indexers?configured=true` whenever creds are filled in and
+  exposes a `WlmDropdown` of real indexer names with an "All indexers"
+  default. Falls back to a free-text field (the previous UX) when the
+  fetch fails or creds are blank. Adds a `Refresh list` button.
+- **Adaptive two-pane layout** at viewport width ≥ 900 px. The Search
+  tab splits into a result list (5 cols) and an inline detail pane
+  (6 cols); tapping a result updates the right pane instead of pushing
+  a new route. Mobile keeps the existing single-column flow.
+- **Unified theme toggle** as a shared `ThemeToggleButton` widget
+  (`app/lib/widgets/theme_toggle_button.dart`). The same icon now
+  appears in the top-right of every full-screen surface — Search,
+  Settings, Onboarding, Detail — so users have a single, predictable
+  way to flip themes from anywhere in the app.
+- **GitHub link in Settings** — replaces the verbose "Where do these
+  come from?" callout with a single ghost button that opens the repo
+  externally, plus the URL printed below in muted text.
+- Tooltips on the previously-bare `Back` and `Share link` icon buttons
+  for screen-reader / keyboard accessibility, and a `Semantics(button)`
+  wrapper on the GitHub link.
+
+#### Removed
+- The "On a phone" web hint banner — replaced by clearer install paths
+  in Settings and the new Movies & TV tab as a primary mobile-friendly
+  surface.
+
+#### Fixed
+- **`.torrent` download button**. On web, `launchUrl` was either
+  popup-blocked or navigated the SPA away when the indexer's response
+  lacked `Content-Disposition`. The button now uses a DOM anchor with
+  the `download` attribute (via a conditional-imported helper) so the
+  file lands in Downloads. On mobile we keep the existing
+  `LaunchMode.externalApplication` path. The button is also hidden
+  outright when the indexer didn't include a `.torrent` URL — most
+  public trackers (TPB, RARBG, Nyaa) only ship magnets, so a
+  permanently-disabled button was just noise.
+
+#### Changed
+- `DetailPage` accepts an `embedded: true` flag that omits its
+  `WlmAppScaffold` chrome — used by the wide-screen two-pane shell.
+- `SearchPage` accepts an optional `onSelect` callback used by the
+  shell to show the result inline on wide screens, plus a public
+  `runQuery()` hook the AppShell uses to bridge from Discover.
+  It also now listens to `SettingsStore` and clears stale results
+  when the active backend changes (e.g. on **Exit demo**).
+- `SettingsStore` gains `onboardingDone`, `tmdbKey`, and `cardChips`.
+- Default `ThemeMode` is now `dark` (was `system`).
+- Demo backend is now gated behind a compile-time flag
+  (`kAllowDemo` / `--dart-define=ALLOW_DEMO=true`). It defaults on in
+  debug builds (`flutter run`) and **off** in release builds. The
+  Vercel build script does not pass the flag, so production web no
+  longer exposes any demo affordance (onboarding card, settings
+  shortcut, or empty-state hint). See README → **Demo mode**.
+- Added dependencies: `cached_network_image` (poster/backdrop caching)
+  and `flutter_staggered_grid_view` (Movies & TV poster grid).
+
 ### [0.1.4] – 2026-05-05
 
 #### Added
