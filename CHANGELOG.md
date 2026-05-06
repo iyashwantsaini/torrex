@@ -23,6 +23,27 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.2.2] – 2026-05-06
+
+#### Fixed
+- TMDB poster / synopsis enrichment now works for **every** indexer, not
+  just TheRARBG. The Torznab parser was only keeping the first
+  `<category>` element; PTB / Nyaa / EZTV / YTS emit a string category
+  ("Video/HD") first instead of a numeric id, so the `isMedia` check
+  failed and TMDB was never queried.
+- `TorrentResult.isMedia` / `mediaKindHint` also recognise `video`,
+  `film`, `anime`, `series`, `S01E02` episode patterns, and bare release
+  years — so even category-less feeds get enriched when the filename
+  looks like media.
+
+#### Changed
+- **Discover → Find torrents** now sends `"Title YEAR"` (e.g.
+  `Inception 2010`) instead of just the bare title, so Torznab returns
+  the actual release rather than every torrent that happens to share a
+  word with the title.
+- Backend seed indexer list expanded to: `eztv`, `linuxtracker`,
+  `nyaasi`, `thepiratebay`, `therarbg`, `torrentgalaxyclone`, `yts`.
+
 ### [0.2.1] – 2026-05-06
 
 #### Fixed
