@@ -4,7 +4,10 @@
 #
 # Only list PUBLIC indexers that work without FlareSolverr or auth.
 # IDs match Jackett's internal slug (lowercase, no spaces).
+eztv
 linuxtracker
 nyaasi
 thepiratebay
 therarbg
+torrentgalaxyclone
+yts

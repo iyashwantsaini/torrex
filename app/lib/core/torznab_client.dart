@@ -149,7 +149,16 @@ class TorznabClient {
     final indexer = text('jackettindexer').isNotEmpty
         ? text('jackettindexer')
         : (attr('jackettindexer', 'id') ?? '');
-    final category = text('category');
+    // Indexers emit one or many <category> elements (numeric Torznab ids
+    // and/or human strings). RARBG puts the numeric id first; PTB/nyaasi
+    // put a string like "Video/HD" first. We need *all* of them so the
+    // isMedia heuristic on TorrentResult fires consistently — otherwise
+    // TMDB enrichment only kicks in for RARBG.
+    final category = item
+        .findElements('category')
+        .map((e) => e.innerText.trim())
+        .where((s) => s.isNotEmpty)
+        .join(' ');
 
     final sizeStr = text('size').isNotEmpty
         ? text('size')

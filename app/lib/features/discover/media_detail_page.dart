@@ -162,8 +162,14 @@ class _MediaDetailPageState extends State<MediaDetailPage> {
               label: 'Find torrents',
               icon: Icons.search_rounded,
               expand: true,
-              onPressed: () => Navigator.of(context)
-                  .pop(FindTorrentsRequest(m.title)),
+              // Send title + year so the Torznab search returns the
+              // actual film/show instead of every release that happens
+              // to share a word with the title ("It", "Up", "Cars").
+              onPressed: () => Navigator.of(context).pop(
+                FindTorrentsRequest(
+                  m.year.isNotEmpty ? '${m.title} ${m.year}' : m.title,
+                ),
+              ),
             ),
           ),
           if (m.kind == TmdbMediaKind.tv && m.seasons.isNotEmpty) ...[

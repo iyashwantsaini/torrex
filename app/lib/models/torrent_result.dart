@@ -58,13 +58,29 @@ class TorrentResult {
   /// Whether the title looks like media (movie / TV episode). Used to
   /// gate TMDB lookups so we don't waste API calls on `ubuntu-22.iso`.
   ///
-  /// Heuristic: the Torznab category id starts with `2000` (Movies) or
-  /// `5000` (TV). Falls back to the human-readable category string.
+  /// Heuristic order:
+  ///   1. Torznab category id range (2000=Movies, 5000=TV).
+  ///   2. Human category string contains "movie"/"tv"/"show".
+  ///   3. Title pattern matches a TV episode tag (S01E02) or a movie
+  ///      release year (1900–2099 in parens or surrounded by separators).
+  /// Step 3 catches indexers that don't emit a category at all (some nyaa
+  /// feeds) so they still get poster / synopsis enrichment.
   bool get isMedia {
-    if (category.isEmpty) return false;
     final c = category.toLowerCase();
     if (c.startsWith('2000') || c.startsWith('5000')) return true;
-    return c.contains('movie') || c.contains('tv') || c.contains('show');
+    if (c.contains('2000') || c.contains('5000')) return true;
+    if (c.contains('movie') || c.contains('tv') || c.contains('show') ||
+        c.contains('video') || c.contains('film') || c.contains('anime') ||
+        c.contains('series')) {
+      return true;
+    }
+    final t = title;
+    if (RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(t)) return true;
+    if (RegExp(r'(?:^|[\s.\-_(\[])(19|20)\d{2}(?:[\s.\-_)\]]|$)')
+        .hasMatch(t)) {
+      return true;
+    }
+    return false;
   }
 
   /// `'movie'` if the category is in the Torznab 2000 range,
@@ -72,10 +88,14 @@ class TorrentResult {
   /// search endpoint.
   String? get mediaKindHint {
     final c = category.toLowerCase();
-    if (c.startsWith('2000') || c.contains('movie')) return 'movie';
-    if (c.startsWith('5000') || c.contains('tv') || c.contains('show')) {
+    if (c.contains('5000') || c.contains('tv') || c.contains('show') ||
+        c.contains('series') || c.contains('anime')) {
       return 'tv';
     }
+    if (c.contains('2000') || c.contains('movie') || c.contains('film')) {
+      return 'movie';
+    }
+    if (RegExp(r'[Ss]\d{1,2}[Ee]\d{1,3}').hasMatch(title)) return 'tv';
     return null;
   }
 }
