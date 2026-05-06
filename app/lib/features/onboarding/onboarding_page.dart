@@ -49,11 +49,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.initState();
     _baseUrl = TextEditingController(text: widget.settings.baseUrl);
     _apiKey = TextEditingController(text: widget.settings.apiKey);
+    // Re-evaluate Continue's enabled state as the user types.
+    _baseUrl.addListener(_onCredsChanged);
+    _apiKey.addListener(_onCredsChanged);
+  }
+
+  void _onCredsChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _pageCtrl.dispose();
+    _baseUrl.removeListener(_onCredsChanged);
+    _apiKey.removeListener(_onCredsChanged);
     _baseUrl.dispose();
     _apiKey.dispose();
     super.dispose();
