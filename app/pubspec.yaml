@@ -1,7 +1,7 @@
 name: torrex
 description: "Torrex — Torznab/Jackett client with WolwoLoom design system."
 publish_to: 'none'
-version: 0.2.0+7
+version: 0.2.1+8
 
 environment:
   sdk: ^3.11.5

@@ -23,6 +23,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.2.1] – 2026-05-06
+
+#### Fixed
+- Onboarding **Continue** button on the credentials step now enables as
+  soon as both Base URL and Jackett API key are non-empty. Previously
+  the page didn't rebuild while typing because `TextEditingController`
+  doesn't trigger `setState` on its own.
+
 ### [0.2.0] – 2026-05-06
 
 #### Added
