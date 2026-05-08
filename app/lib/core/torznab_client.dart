@@ -183,10 +183,6 @@ class TorznabClient {
         : text('guid');
     // <link> is the .torrent download or magnet, depending on indexer.
     final link = text('link');
-    final magnetUri = magnet.startsWith('magnet:')
-        ? magnet
-        : (link.startsWith('magnet:') ? link : '');
-    final downloadUrl = link.startsWith('magnet:') ? '' : link;
 
     // Extended attributes (only present when the caller passed `extended=1`
     // AND the indexer supports them). All fall back to empty / empty list.
@@ -201,6 +197,40 @@ class TorznabClient {
 
     final files = _collectFiles(item);
     final trackers = _collectMulti(item, 'tracker');
+
+    // Magnet resolution. We *strongly* prefer a usable magnet URI so the
+    // app can hand it straight to the user's torrent client (Flud,
+    // qBittorrent, Transmission, etc.) without going through Jackett's
+    // /dl redirect — which is flaky on web and on some Android browsers.
+    //
+    //   1. If the feed already gave us a `magnet:` (either via the
+    //      `magneturl` torznab:attr or as the <link>), use it as-is.
+    //   2. Otherwise, if Jackett surfaced an `infohash`, synthesise a
+    //      magnet client-side: xt=urn:btih:<hash> + dn=<title> +
+    //      every tracker we know about. This is what every torrent
+    //      client expects and works offline.
+    //   3. Fall back to the .torrent download URL as a last resort.
+    String magnetUri;
+    String downloadUrl;
+    if (magnet.startsWith('magnet:')) {
+      magnetUri = magnet;
+      downloadUrl = link.startsWith('magnet:') ? '' : link;
+    } else if (link.startsWith('magnet:')) {
+      magnetUri = link;
+      downloadUrl = '';
+    } else if (infoHash.isNotEmpty) {
+      magnetUri = _buildMagnet(
+        infoHash: infoHash,
+        displayName: title,
+        trackers: trackers,
+      );
+      // Keep the .torrent URL around as a fallback for the "Download
+      // .torrent" button when the user explicitly wants the file.
+      downloadUrl = link;
+    } else {
+      magnetUri = '';
+      downloadUrl = link;
+    }
 
     return TorrentResult(
       title: title,
@@ -222,6 +252,45 @@ class TorznabClient {
       trackers: trackers,
     );
   }
+
+  /// Build a `magnet:` URI from the pieces Jackett gives us in extended
+  /// mode. The result includes the standard well-known public DHT trackers
+  /// in addition to whatever the indexer reported, so even feeds that
+  /// don't list trackers (TheRARBG, YTS) still produce a magnet that
+  /// connects to the swarm immediately.
+  static String _buildMagnet({
+    required String infoHash,
+    required String displayName,
+    required List<String> trackers,
+  }) {
+    // BTIH must be 40-char hex (v1) or 32-char base32. Don't try to
+    // be clever — pass through whatever Jackett gave us; clients are
+    // tolerant of casing.
+    final params = <String>[
+      'xt=urn:btih:$infoHash',
+      if (displayName.isNotEmpty)
+        'dn=${Uri.encodeQueryComponent(displayName)}',
+    ];
+    final seen = <String>{};
+    for (final t in [...trackers, ..._kPublicTrackers]) {
+      final url = t.trim();
+      if (url.isEmpty) continue;
+      if (!seen.add(url)) continue;
+      params.add('tr=${Uri.encodeQueryComponent(url)}');
+    }
+    return 'magnet:?${params.join('&')}';
+  }
+
+  /// A small set of widely-used public DHT/UDP trackers. We append these
+  /// as a fallback when the indexer's feed doesn't include any tracker
+  /// list of its own. Keeps magnets working even on minimal RSS feeds.
+  static const List<String> _kPublicTrackers = [
+    'udp://tracker.opentrackr.org:1337/announce',
+    'udp://open.stealth.si:80/announce',
+    'udp://tracker.torrent.eu.org:451/announce',
+    'udp://exodus.desync.com:6969/announce',
+    'udp://tracker.openbittorrent.com:6969/announce',
+  ];
 
   /// Collect every value of a repeated `<torznab:attr name="X">` (or the
   /// unprefixed `<attr>` variant). Order preserved.

@@ -23,6 +23,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.2.3] – 2026-05-08
+
+#### Fixed
+- **Magnet hand-off restored.** When an indexer's RSS doesn't include a
+  `magnet:` URI inline (TPB, EZTV, YTS, TheRARBG via Jackett), Torrex
+  now synthesises one client-side from the `infohash` + title +
+  trackers that Jackett surfaces in extended mode, and appends a small
+  set of well-known public DHT trackers as a fallback. Result: the
+  **Open magnet** button always produces a real `magnet:` URI that goes
+  straight to Flud / qBittorrent / Transmission, instead of routing
+  through Jackett's `/dl` redirect (which was flaky on web and on some
+  Android browsers). The .torrent download URL is still kept as a
+  secondary fallback.
+
 ### [0.2.2] – 2026-05-06
 
 #### Fixed
