@@ -26,6 +26,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### [0.3.1] – 2026-08-09
 
 #### Fixed
+- **Movies & TV grid ignored the window size.** The poster grid hardcoded
+  `crossAxisCount: 2`, so a maximised desktop window rendered two enormous
+  posters instead of a catalog. Column count is now derived from the
+  available width (~190dp per tile, clamped to 2–8), giving 2 columns on a
+  phone, ~5 on a tablet and 7–8 on a wide desktop window.
 - **Filter sheet threw four framework assertions on current Flutter.**
   `WlmSwitchTile` (wolwoloom 0.3.4) nests a `SwitchListTile` inside
   `WlmCard`'s coloured `DecoratedBox`, which trips Flutter's *"ListTile
@@ -45,7 +50,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 #### Added
 - Widget tests covering the boolean-option round-trip (tap the row, Apply,
-  read the returned filters) and the no-`ListTile` invariant.
+  read the returned filters) and the no-`ListTile` invariant, plus unit
+  tests pinning the responsive grid's column count across widths.
 
 ### [0.3.0] – 2026-08-09
 

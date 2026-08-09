@@ -7,6 +7,32 @@ import '../../core/settings_store.dart';
 import '../../core/tmdb_client.dart';
 import 'media_detail_page.dart';
 
+/// Gap between poster tiles, and the grid's own outer padding.
+const double kDiscoverGridSpacing = 12;
+
+/// Width a poster tile aims for. Chosen so a TMDB `w342` poster renders
+/// close to 1:1 on a 2x display without looking cramped.
+const double kDiscoverTargetTileWidth = 190;
+
+/// How many poster columns fit in [width].
+///
+/// Clamped to 2..8 so a very narrow phone still gets a two-up grid and an
+/// ultrawide monitor doesn't degenerate into a wall of thumbnails. The
+/// grid used to hardcode 2, which on a maximised desktop window rendered
+/// two enormous posters.
+int discoverGridColumns(double width) {
+  // The grid pads itself on both sides, so that comes off the top first.
+  final usable = width - kDiscoverGridSpacing * 2;
+  if (usable <= 0) return 2;
+  // n tiles need n*tile + (n-1)*spacing, so add one spacing to both sides
+  // of the division to solve for n.
+  final fit =
+      ((usable + kDiscoverGridSpacing) /
+              (kDiscoverTargetTileWidth + kDiscoverGridSpacing))
+          .floor();
+  return fit.clamp(2, 8);
+}
+
 /// Browse-and-search catalog backed by TMDB. Two sub-tabs (Movies / TV);
 /// each shows a trending feed by default and switches to live search
 /// results when the user types. Tapping a card opens [MediaDetailPage].
@@ -256,17 +282,27 @@ class _MediaGrid extends StatelessWidget {
         ),
       );
     }
-    return MasonryGridView.count(
-      padding: const EdgeInsets.all(12),
-      crossAxisCount: 2,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      itemCount: items!.length,
-      itemBuilder: (context, i) => _PosterCard(
-        media: items![i],
-        settings: settings,
-        onFindTorrents: onFindTorrents,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Posters read best around 190dp wide. Deriving the column count
+        // from the available width keeps the grid sensible everywhere:
+        // 2 columns on a phone, ~4 on a tablet, 7-8 on a maximised desktop
+        // window. It used to be pinned at 2, which turned a wide window
+        // into two enormous posters.
+        final columns = discoverGridColumns(constraints.maxWidth);
+        return MasonryGridView.count(
+          padding: const EdgeInsets.all(kDiscoverGridSpacing),
+          crossAxisCount: columns,
+          mainAxisSpacing: kDiscoverGridSpacing,
+          crossAxisSpacing: kDiscoverGridSpacing,
+          itemCount: items!.length,
+          itemBuilder: (context, i) => _PosterCard(
+            media: items![i],
+            settings: settings,
+            onFindTorrents: onFindTorrents,
+          ),
+        );
+      },
     );
   }
 }
@@ -290,8 +326,7 @@ class _PosterCard extends StatelessWidget {
       onTap: () async {
         final result = await Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) =>
-                MediaDetailPage(media: media, settings: settings),
+            builder: (_) => MediaDetailPage(media: media, settings: settings),
           ),
         );
         if (result is FindTorrentsRequest) {
@@ -308,8 +343,10 @@ class _PosterCard extends StatelessWidget {
               child: poster.isEmpty
                   ? Container(
                       color: scheme.surfaceContainerHighest,
-                      child: Icon(Icons.image_not_supported_outlined,
-                          color: scheme.outline),
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        color: scheme.outline,
+                      ),
                     )
                   : CachedNetworkImage(
                       imageUrl: poster,
@@ -331,10 +368,9 @@ class _PosterCard extends StatelessWidget {
           if (media.year.isNotEmpty)
             Text(
               media.year,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: scheme.outline),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: scheme.outline),
             ),
         ],
       ),
