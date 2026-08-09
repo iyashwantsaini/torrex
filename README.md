@@ -58,7 +58,8 @@ torrent client the user picks from the Android system chooser.
 torrex/
 ├── app/                       # Flutter app (Android + iOS + Web)
 │   ├── lib/
-│   │   ├── core/              # settings_store, torznab_client, demo_results
+│   │   ├── core/              # settings_store, torznab_client, release_parser,
+│   │   │                      # search_filters, search_history, demo_results
 │   │   ├── models/            # torrent_result
 │   │   └── features/
 │   │       ├── shell/         # bottom-nav scaffold
@@ -133,8 +134,21 @@ flowchart TB
 
 ## Screens
 
-- **Search** — query field, sort (seeders / size / date), result list with
-  swarm/size/age chips. Tap a row to open the detail view.
+- **Search** — query field plus the full refine stack:
+  - **Facet bar** — filter by indexer (with per-indexer hit counts) and by
+    category (Movies · TV · Anime · Music · Games · Apps · Books · XXX).
+    Picking a single category also narrows the Torznab query server-side
+    via `cat=`.
+  - **Sort** — relevance / seeders / leechers / size / date / quality, each
+    with an ascending-descending toggle (tap the active chip to flip).
+  - **Filters sheet** — minimum seeders, min/max size, resolution, source,
+    codec, language, magnet-only, HDR-only, safe mode, exclude-words.
+  - **Result cards** — release-name quality badges (1080p · WEB-DL · x265 ·
+    DV · Atmos · …), a colour-graded swarm-health bar, and configurable
+    metadata chips.
+  - **Duplicate merging** — the same torrent from several indexers collapses
+    into one row with a "+N sources" badge.
+  - Recent searches, pull-to-refresh, and a configurable page size.
 - **Detail** — full title, all metadata, info-hash, raw magnet, and four
   actions:
   - **Open magnet** → Android system chooser → installed torrent clients
@@ -143,7 +157,8 @@ flowchart TB
   - **Copy link** → clipboard
   - **View on indexer** → opens the original details page in the browser
 - **Settings** — backend URL, API key (stored in Keystore, not plain prefs),
-  default indexer, theme (system / light / dark).
+  default indexer, results-per-search limit, result-card chips, theme
+  (system / light / dark).
 
 ## Releases
 

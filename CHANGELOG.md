@@ -23,6 +23,91 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.3.0] – 2026-08-09
+
+#### Fixed
+- **Searches no longer need two or three attempts.** Three separate
+  causes were fixed together:
+  - *Races.* Rapid successive searches were unsequenced, so a slow first
+    request could land after a newer one and overwrite good results with
+    stale empties. Every search now carries a monotonic sequence id and a
+    Dio `CancelToken`; superseded responses are cancelled and discarded.
+  - *Cold backends.* Jackett behind a sleeping Hugging Face Space answers
+    the first request with an HTML holding page, a timeout, or a 200 with
+    zero items. The Torznab client now retries transient failures — and
+    empty-but-OK bodies — up to three times with backoff, and the receive
+    timeout went from 30s to 75s (a cold aggregate search across 20+
+    indexers routinely needs more than 30s). A "still searching" callout
+    explains the wait instead of leaving the user staring at skeletons.
+  - *Misleading empty state.* A completed search that genuinely found
+    nothing rendered the same "Type a query above to search" copy as the
+    pre-search state, so it looked like nothing had happened. There is now
+    a distinct **No results for "…"** state with a retry action.
+- `?page=settings` opened the Movies & TV tab instead of Settings (the
+  deep-link mapped to index 1, but Settings moved to index 2 when the
+  Discover tab was added).
+- Tapping **Open** on a magnet with no torrent client installed threw an
+  unhandled `PlatformException` on web and some Android OEM builds
+  instead of showing the "no app installed" snackbar.
+- Result list keys used `bestUri`, which is empty for results that carry
+  neither a magnet nor a download URL — they now use a stable `id` that
+  falls back through info-hash → link → title.
+- Release parsing treated a bare `ISO` as a full-disc video source, so
+  `ubuntu-26.04-desktop-amd64.iso` picked up a bogus **COMPLETE** quality
+  badge.
+- Category inference fell back to the release name even when the indexer
+  *had* supplied a category we simply didn't recognise, which filed Linux
+  distro images ("OS / Linux") and dataset dumps ("Data / Archive") under
+  **Movies**. Release-name inference is now a last resort reserved for
+  results with no category at all, and the generic "Video" bucket splits
+  into Movies/TV based on whether the title carries a season tag.
+- The swarm-health `LinearProgressIndicator` leaked its implicit role up
+  the tree, so screen readers announced every result card as a progress
+  bar. It's now wrapped in `ExcludeSemantics` — the card's own semantic
+  label already describes the swarm in words.
+
+#### Added
+- **Filter by indexer, right above the results.** A horizontally
+  scrolling facet bar shows every indexer that contributed to the current
+  result set with its hit count, plus an "All" reset. Multi-select.
+- **Category facets** in the same bar (Movies · TV · Anime · Music ·
+  Games · Apps · Books · XXX), derived from Torznab category ids with a
+  fallback to the human-readable category string and finally the release
+  name. Selecting exactly one category also narrows the *server-side*
+  query via Torznab's `cat=` parameter, so the result limit is spent on
+  things you actually want.
+- **Release-name parsing** (`ReleaseParser`) — resolution, source, codec,
+  HDR/Dolby Vision, audio format and channel layout, season/episode,
+  release group, language tags, PROPER/REPACK/EXTENDED/3D. Rendered as
+  quality badges on every result card, the same way mainstream torrent
+  sites do it.
+- **Swarm health bar** on each card: a colour-graded seed/leech indicator
+  with a Dead → Weak → Fair → Good → Excellent label.
+- **Advanced filter sheet**: minimum seeders, min/max size, resolution,
+  source, codec, language, indexer, magnet-only, HDR-only, safe mode
+  (hide XXX), and a free-text exclude-words field.
+- **Duplicate merging.** The same torrent reported by several indexers
+  collapses into one row (matched by info-hash, falling back to a
+  normalised title + size key), keeping the best swarm numbers and
+  showing a "+N sources" badge. Toggleable.
+- **More sort options**: relevance, seeders, leechers, size, date and a
+  composite quality score — each with an ascending/descending toggle
+  (tap the active sort chip to flip it).
+- **Recent searches**, persisted and shown on both empty states, with a
+  one-tap clear.
+- **Pull-to-refresh** on the results list.
+- **Configurable page size** (10 / 25 / 50 / 100; was a fixed 10) and a
+  **configurable result limit** in Settings (100–1000; was a fixed 100).
+- Two new result-card chips: **Health** and **File count**.
+
+#### Changed
+- Default result limit raised from 100 to 300 rows per search.
+- The two-pane (wide screen) detail view keys off the stable result id, so
+  switching between two results that share a link no longer reuses state.
+- Unit tests added for the release parser, category mapping, filtering,
+  sorting, dedupe and facet counting, plus widget tests covering the
+  filter sheet's Apply/Cancel round-trip and result-card rendering.
+
 ### [0.2.3] – 2026-05-08
 
 #### Fixed

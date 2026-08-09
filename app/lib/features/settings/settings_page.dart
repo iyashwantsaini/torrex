@@ -67,14 +67,16 @@ class _SettingsPageState extends State<SettingsPage> {
     // gate is open (debug builds, or release builds with
     // --dart-define=ALLOW_DEMO=true).
     if (base == 'demo' && kAllowDemo) {
-      setState(() => _indexers = const [
-            JackettIndexer(id: 'thepiratebay', name: 'The Pirate Bay'),
-            JackettIndexer(id: '1337x', name: '1337x'),
-            JackettIndexer(id: 'rarbg', name: 'RARBG'),
-            JackettIndexer(id: 'nyaasi', name: 'Nyaa.si'),
-            JackettIndexer(id: 'limetorrents', name: 'LimeTorrents'),
-            JackettIndexer(id: 'yts', name: 'YTS'),
-          ]);
+      setState(
+        () => _indexers = const [
+          JackettIndexer(id: 'thepiratebay', name: 'The Pirate Bay'),
+          JackettIndexer(id: '1337x', name: '1337x'),
+          JackettIndexer(id: 'rarbg', name: 'RARBG'),
+          JackettIndexer(id: 'nyaasi', name: 'Nyaa.si'),
+          JackettIndexer(id: 'limetorrents', name: 'LimeTorrents'),
+          JackettIndexer(id: 'yts', name: 'YTS'),
+        ],
+      );
       return;
     }
     if (base.isEmpty || key.isEmpty) {
@@ -107,10 +109,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _openRepo() async {
-    await launchUrl(
-      Uri.parse(_kRepoUrl),
-      mode: LaunchMode.externalApplication,
-    );
+    await launchUrl(Uri.parse(_kRepoUrl), mode: LaunchMode.externalApplication);
   }
 
   /// Switch to / from the offline preview backend. Demo mode pre-fills
@@ -135,11 +134,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _baseUrl.clear();
     _apiKey.clear();
     _indexerText.text = 'all';
-    await widget.settings.update(
-      baseUrl: '',
-      apiKey: '',
-      indexer: 'all',
-    );
+    await widget.settings.update(baseUrl: '', apiKey: '', indexer: 'all');
     if (!mounted) return;
     setState(() => _indexers = const []);
   }
@@ -181,8 +176,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 8),
         ],
-        const WlmSectionLabel('Backend',
-            padding: EdgeInsets.only(bottom: 8)),
+        const WlmSectionLabel('Backend', padding: EdgeInsets.only(bottom: 8)),
         const SizedBox(height: 12),
         WlmTextField(
           controller: _baseUrl,
@@ -203,9 +197,37 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         const SizedBox(height: 16),
         _buildIndexerPicker(context, indexers),
+        const SizedBox(height: 16),
+        const WlmSectionLabel(
+          'Results per search',
+          padding: EdgeInsets.only(bottom: 8),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final n in SettingsStore.resultLimitOptions)
+              WlmChip(
+                label: '$n',
+                selected: widget.settings.resultLimit == n,
+                onTap: () => widget.settings.update(resultLimit: n),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'How many rows to request from the backend. Higher values widen '
+          'the aggregate search but take longer on cold indexers.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.outline),
+        ),
         const SizedBox(height: 24),
-        const WlmSectionLabel('TMDB (optional)',
-            padding: EdgeInsets.only(bottom: 8)),
+        const WlmSectionLabel(
+          'TMDB (optional)',
+          padding: EdgeInsets.only(bottom: 8),
+        ),
         const SizedBox(height: 12),
         WlmTextField(
           controller: _tmdbKey,
@@ -228,8 +250,10 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
         const SizedBox(height: 24),
-        const WlmSectionLabel('Result card',
-            padding: EdgeInsets.only(bottom: 8)),
+        const WlmSectionLabel(
+          'Result card',
+          padding: EdgeInsets.only(bottom: 8),
+        ),
         const SizedBox(height: 12),
         _ChipPicker(
           selected: widget.settings.cardChips,
@@ -239,8 +263,10 @@ class _SettingsPageState extends State<SettingsPage> {
           },
         ),
         const SizedBox(height: 24),
-        const WlmSectionLabel('Appearance',
-            padding: EdgeInsets.only(bottom: 8)),
+        const WlmSectionLabel(
+          'Appearance',
+          padding: EdgeInsets.only(bottom: 8),
+        ),
         const SizedBox(height: 12),
         WlmSegmentedControl<ThemeMode>(
           value: widget.settings.themeMode,
@@ -273,10 +299,9 @@ class _SettingsPageState extends State<SettingsPage> {
         Text(
           _kRepoUrl,
           textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: scheme.outline),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: scheme.outline),
         ),
       ],
     );
@@ -322,10 +347,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final items = <WlmDropdownItem<String>>[
       const WlmDropdownItem(value: 'all', label: 'All indexers'),
       for (final i in indexers)
-        WlmDropdownItem(
-          value: i.id,
-          label: i.name.isEmpty ? i.id : i.name,
-        ),
+        WlmDropdownItem(value: i.id, label: i.name.isEmpty ? i.id : i.name),
     ];
     final current = widget.settings.indexer.isEmpty
         ? 'all'
@@ -379,6 +401,8 @@ class _ChipPicker extends StatelessWidget {
     ('leechers', 'Leechers'),
     ('size', 'Size'),
     ('age', 'Age'),
+    ('health', 'Health'),
+    ('files', 'File count'),
     ('indexer', 'Indexer'),
     ('category', 'Category'),
     ('magnet', 'Magnet'),

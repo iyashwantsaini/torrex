@@ -17,10 +17,17 @@ class SettingsStore extends ChangeNotifier {
   static const _kTmdbKey = 'tmdb.apiKey';
   static const _kOnboardingDone = 'ui.onboardingDone';
   static const _kCardChips = 'ui.cardChips';
+  static const _kResultLimit = 'backend.resultLimit';
 
   /// Default chips on the result card. Order = render order.
-  /// Identifiers must stay in sync with [SearchResultChip.values].
+  /// Identifiers must stay in sync with [_allKnownChips].
   static const defaultCardChips = <String>['seeders', 'size', 'age'];
+
+  /// How many rows to ask Torznab for. Jackett caps most public indexers
+  /// around 100 each, so a high number here mostly widens the aggregate
+  /// search rather than deepening any single indexer.
+  static const int defaultResultLimit = 300;
+  static const List<int> resultLimitOptions = [100, 200, 300, 500, 1000];
 
   final FlutterSecureStorage _secure;
 
@@ -31,6 +38,7 @@ class SettingsStore extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.dark;
   bool _onboardingDone = false;
   List<String> _cardChips = defaultCardChips;
+  int _resultLimit = defaultResultLimit;
 
   String get baseUrl => _baseUrl;
   String get indexer => _indexer;
@@ -39,6 +47,7 @@ class SettingsStore extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   bool get onboardingDone => _onboardingDone;
   List<String> get cardChips => _cardChips;
+  int get resultLimit => _resultLimit;
   bool get hasTmdbKey => _tmdbKey.isNotEmpty;
 
   bool get isConfigured =>
@@ -54,6 +63,7 @@ class SettingsStore extends ChangeNotifier {
     _cardChips = (savedChips == null || savedChips.isEmpty)
         ? defaultCardChips
         : savedChips;
+    _resultLimit = prefs.getInt(_kResultLimit) ?? defaultResultLimit;
     _apiKey = await _secure.read(key: _kApiKey) ?? '';
     _tmdbKey = await _secure.read(key: _kTmdbKey) ?? '';
     notifyListeners();
@@ -67,6 +77,7 @@ class SettingsStore extends ChangeNotifier {
     ThemeMode? themeMode,
     bool? onboardingDone,
     List<String>? cardChips,
+    int? resultLimit,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     if (baseUrl != null) {
@@ -97,10 +108,16 @@ class SettingsStore extends ChangeNotifier {
       // Filter to known chip ids only — defends against schema drift if a
       // user opens an older app version with a never-released chip key.
       _cardChips = cardChips
-          .where((c) => defaultCardChips.contains(c) || _allKnownChips.contains(c))
+          .where(
+            (c) => defaultCardChips.contains(c) || _allKnownChips.contains(c),
+          )
           .toList(growable: false);
       if (_cardChips.isEmpty) _cardChips = defaultCardChips;
       await prefs.setStringList(_kCardChips, _cardChips);
+    }
+    if (resultLimit != null) {
+      _resultLimit = resultLimit.clamp(50, 2000);
+      await prefs.setInt(_kResultLimit, _resultLimit);
     }
     notifyListeners();
   }
@@ -115,6 +132,8 @@ class SettingsStore extends ChangeNotifier {
     'indexer',
     'category',
     'magnet',
+    'health',
+    'files',
   };
 
   static ThemeMode _decodeThemeMode(String? value) => switch (value) {

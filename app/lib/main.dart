@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'core/backend_warmer.dart';
 import 'core/demo_results.dart';
+import 'core/search_history.dart';
 import 'core/settings_store.dart';
 import 'features/detail/detail_page.dart';
 import 'features/onboarding/onboarding_page.dart';
@@ -13,6 +14,9 @@ Future<void> main() async {
   final settings = SettingsStore();
   await settings.load();
   await _maybeApplyUrlOverrides(settings);
+  final history = SearchHistory();
+  // ignore: discarded_futures
+  history.load();
   final warmer = BackendWarmer();
   // `?warmupDelay=<ms>` (web only) artificially keeps the banner visible
   // for N ms so we can preview the "Waking backend…" UI even when the
@@ -36,11 +40,14 @@ Future<void> main() async {
       warmer.warm(settings, artificialDelay: artificialDelay);
     }
   });
-  runApp(TorrexApp(
-    settings: settings,
-    warmer: warmer,
-    initialRoute: _routeFromUrl(),
-  ));
+  runApp(
+    TorrexApp(
+      settings: settings,
+      warmer: warmer,
+      history: history,
+      initialRoute: _routeFromUrl(),
+    ),
+  );
 }
 
 /// On web, allow `?demo=1` and `?page=...` URL parameters to drive the app
@@ -77,11 +84,13 @@ class InitialRouteApplier extends StatefulWidget {
     required this.route,
     required this.settings,
     required this.warmer,
+    this.history,
   });
 
   final InitialRoute route;
   final SettingsStore settings;
   final BackendWarmer warmer;
+  final SearchHistory? history;
 
   @override
   State<InitialRouteApplier> createState() => _InitialRouteApplierState();
@@ -115,7 +124,8 @@ class _InitialRouteApplierState extends State<InitialRouteApplier> {
     // Show onboarding only on a true first launch (no saved creds AND
     // wizard never completed). Honors `?page=` deep links by skipping
     // the wizard when an explicit route was requested.
-    final mustOnboard = !_onboardingFinished &&
+    final mustOnboard =
+        !_onboardingFinished &&
         !widget.settings.onboardingDone &&
         !widget.settings.isConfigured &&
         widget.route == InitialRoute.search;
@@ -128,7 +138,10 @@ class _InitialRouteApplierState extends State<InitialRouteApplier> {
     return AppShell(
       settings: widget.settings,
       warmer: widget.warmer,
-      initialIndex: widget.route == InitialRoute.settings ? 1 : 0,
+      history: widget.history,
+      // Tab order is Search (0) · Movies & TV (1) · Settings (2).
+      // `?page=settings` used to land on Movies & TV because this said 1.
+      initialIndex: widget.route == InitialRoute.settings ? 2 : 0,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:wolwoloom/wolwoloom.dart';
 
 import '../../core/backend_warmer.dart';
+import '../../core/search_history.dart';
 import '../../core/settings_store.dart';
 import '../../models/torrent_result.dart';
 import '../../widgets/theme_toggle_button.dart';
@@ -15,11 +16,13 @@ class AppShell extends StatefulWidget {
     super.key,
     required this.settings,
     required this.warmer,
+    this.history,
     this.initialIndex = 0,
   });
 
   final SettingsStore settings;
   final BackendWarmer warmer;
+  final SearchHistory? history;
   final int initialIndex;
 
   @override
@@ -52,9 +55,8 @@ class _AppShellState extends State<AppShell> {
     final searchPage = SearchPage(
       key: _searchKey,
       settings: widget.settings,
-      onSelect: isWide
-          ? (r) => setState(() => _selectedResult = r)
-          : null,
+      history: widget.history,
+      onSelect: isWide ? (r) => setState(() => _selectedResult = r) : null,
     );
 
     final searchPane = isWide && _index == 0
@@ -67,7 +69,7 @@ class _AppShellState extends State<AppShell> {
                 child: _selectedResult == null
                     ? _DetailPlaceholder(scheme: scheme)
                     : DetailPage(
-                        key: ValueKey(_selectedResult!.bestUri),
+                        key: ValueKey(_selectedResult!.id),
                         result: _selectedResult!,
                         settings: widget.settings,
                         embedded: true,
@@ -80,9 +82,7 @@ class _AppShellState extends State<AppShell> {
     return WlmAppScaffold(
       appBar: WlmAppBar(
         title: _titles[_index],
-        actions: [
-          ThemeToggleButton(settings: widget.settings),
-        ],
+        actions: [ThemeToggleButton(settings: widget.settings)],
       ),
       body: Column(
         children: [
@@ -172,15 +172,14 @@ class _DetailPlaceholder extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.touch_app_outlined,
-                size: 36, color: scheme.outline),
+            Icon(Icons.touch_app_outlined, size: 36, color: scheme.outline),
             const SizedBox(height: 12),
             Text(
               'Pick a result to see its details here.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.outline,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: scheme.outline),
             ),
           ],
         ),

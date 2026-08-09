@@ -17,10 +17,17 @@ class TorznabClient {
   static Dio _defaultDio() {
     final d = Dio(
       BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 20),
+        // Jackett proxies every configured indexer serially-ish; a cold
+        // aggregate search across 20+ trackers routinely needs 40s+.
+        // The old 30s cut it off mid-flight, which is why the same query
+        // "worked on the 3rd try" — by then the indexers were warm.
+        receiveTimeout: const Duration(seconds: 75),
         responseType: ResponseType.plain,
         headers: {'Accept': 'application/xml,text/xml,*/*'},
+        // Let us read Jackett's own error body instead of Dio throwing a
+        // generic "bad response" for 4xx.
+        validateStatus: (s) => s != null && s < 500,
       ),
     );
     return d;
@@ -28,16 +35,37 @@ class TorznabClient {
 
   final Dio _dio;
 
+  /// How many times to re-issue a search that came back empty or timed
+  /// out. Hugging Face Spaces cold-start and Jackett's per-indexer
+  /// scrapers frequently fail the *first* request after an idle period
+  /// and succeed moments later — retrying here is the difference between
+  /// "it works" and "I had to search four times".
+  static const int _maxAttempts = 3;
+
+  static const List<Duration> _backoff = [
+    Duration(milliseconds: 900),
+    Duration(milliseconds: 2200),
+  ];
+
   /// Run a `t=search` query and parse the RSS/Torznab response.
   ///
-  /// Throws [TorznabException] on any HTTP / parse / API error.
+  /// Retries transient failures (timeouts, 5xx-ish, empty-but-OK bodies)
+  /// with backoff. Pass a [cancelToken] so a superseded search can be
+  /// aborted instead of racing the new one.
+  ///
+  /// Throws [TorznabException] on any HTTP / parse / API error that
+  /// survived every attempt.
   Future<List<TorrentResult>> search({
     required String baseUrl,
     required String apiKey,
     required String query,
     String indexer = 'all',
-    int limit = 100,
+    int limit = 300,
+    int offset = 0,
+    List<int> categories = const [],
     bool extended = false,
+    CancelToken? cancelToken,
+    void Function(int attempt)? onRetry,
   }) async {
     if (baseUrl == DemoResults.triggerUrl) {
       // Local preview / screenshot mode — no network call.
@@ -46,25 +74,118 @@ class TorznabClient {
     if (baseUrl.isEmpty) throw const TorznabException('Backend URL not set.');
     if (apiKey.isEmpty) throw const TorznabException('API key not set.');
 
+    TorznabException? lastError;
+    for (var attempt = 0; attempt < _maxAttempts; attempt++) {
+      if (attempt > 0) {
+        onRetry?.call(attempt);
+        await Future<void>.delayed(_backoff[attempt - 1]);
+        if (cancelToken?.isCancelled ?? false) {
+          throw const TorznabException('Search cancelled.');
+        }
+      }
+      try {
+        final results = await _searchOnce(
+          baseUrl: baseUrl,
+          apiKey: apiKey,
+          query: query,
+          indexer: indexer,
+          limit: limit,
+          offset: offset,
+          categories: categories,
+          extended: extended,
+          cancelToken: cancelToken,
+        );
+        // A genuinely empty result set and a "all my indexers timed out"
+        // result set look identical over Torznab, so give it one more
+        // shot before believing it. Only for non-empty queries — an
+        // empty query legitimately returns nothing on most indexers.
+        if (results.isEmpty &&
+            query.trim().isNotEmpty &&
+            attempt < _maxAttempts - 1) {
+          continue;
+        }
+        return results;
+      } on _TransientTorznabException catch (e) {
+        lastError = TorznabException(e.message);
+        continue;
+        // Auth / bad-request style failures will never succeed on retry,
+        // so plain TorznabExceptions propagate straight out of the loop.
+      }
+    }
+    throw lastError ??
+        const TorznabException('Backend did not respond. Try again.');
+  }
+
+  Future<List<TorrentResult>> _searchOnce({
+    required String baseUrl,
+    required String apiKey,
+    required String query,
+    required String indexer,
+    required int limit,
+    required int offset,
+    required List<int> categories,
+    required bool extended,
+    CancelToken? cancelToken,
+  }) async {
     final url = _buildUrl(baseUrl, indexer);
     final Response<String> resp;
     try {
       resp = await _dio.get<String>(
         url,
+        cancelToken: cancelToken,
         queryParameters: {
           'apikey': apiKey,
           't': 'search',
           'q': query,
           'limit': limit,
+          if (offset > 0) 'offset': offset,
+          if (categories.isNotEmpty) 'cat': categories.join(','),
           if (extended) 'extended': 1,
         },
       );
     } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        throw const TorznabException('Search cancelled.');
+      }
+      if (_isTransient(e)) {
+        throw _TransientTorznabException(_describeDioError(e));
+      }
       throw TorznabException(_describeDioError(e));
     }
 
-    final body = resp.data ?? '';
-    if (body.isEmpty) return const [];
+    final status = resp.statusCode ?? 0;
+    if (status == 401 || status == 403) {
+      throw const TorznabException(
+        'Auth failed. Check your API key in Settings.',
+      );
+    }
+    if (status == 404) {
+      throw const TorznabException(
+        'Indexer not found on the backend. Pick a different one in Settings.',
+      );
+    }
+    if (status == 429) {
+      throw const _TransientTorznabException(
+        'Backend is rate-limiting. Retrying\u2026',
+      );
+    }
+
+    final body = resp.data?.trim() ?? '';
+    if (body.isEmpty) {
+      throw const _TransientTorznabException('Backend returned an empty body.');
+    }
+    // Jackett behind a sleeping HF Space (or any reverse proxy hiccup)
+    // answers with an HTML page instead of XML. Treat that as transient
+    // rather than surfacing an unreadable parse error.
+    if (!body.startsWith('<?xml') && !body.startsWith('<rss')) {
+      final looksLikeHtml =
+          body.startsWith('<!') || body.toLowerCase().startsWith('<html');
+      if (looksLikeHtml) {
+        throw const _TransientTorznabException(
+          'Backend is still waking up. Retrying\u2026',
+        );
+      }
+    }
 
     final XmlDocument doc;
     try {
@@ -78,10 +199,28 @@ class TorznabClient {
     if (err != null) {
       final code = err.getAttribute('code') ?? '?';
       final desc = err.getAttribute('description') ?? 'Unknown error';
+      // 100/101 = auth, 200/201/202 = bad request — permanent.
+      // 5xx codes are Jackett's "indexer unavailable", worth a retry.
+      final numeric = int.tryParse(code) ?? 0;
+      if (numeric >= 500) {
+        throw _TransientTorznabException('Indexer error $code: $desc');
+      }
       throw TorznabException('Indexer error $code: $desc');
     }
 
     return doc.findAllElements('item').map(_parseItem).toList(growable: false);
+  }
+
+  static bool _isTransient(DioException e) {
+    final status = e.response?.statusCode;
+    if (status != null) return status >= 500 || status == 429;
+    return switch (e.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.connectionError => true,
+      _ => false,
+    };
   }
 
   /// List the configured indexers (ones the user has set up in Jackett's
@@ -190,7 +329,8 @@ class TorznabClient {
     final imdbId = torznabAttr('imdb') ?? torznabAttr('imdbid') ?? '';
     final tmdbId = torznabAttr('tmdb') ?? torznabAttr('tmdbid') ?? '';
     final tvdbId = torznabAttr('tvdb') ?? torznabAttr('tvdbid') ?? '';
-    final coverUrl = torznabAttr('coverurl') ??
+    final coverUrl =
+        torznabAttr('coverurl') ??
         torznabAttr('cover') ??
         torznabAttr('poster') ??
         '';
@@ -250,6 +390,7 @@ class TorznabClient {
       coverUrl: coverUrl,
       files: files,
       trackers: trackers,
+      sourceIndexers: indexer.isEmpty ? const {} : {indexer},
     );
   }
 
@@ -268,8 +409,7 @@ class TorznabClient {
     // tolerant of casing.
     final params = <String>[
       'xt=urn:btih:$infoHash',
-      if (displayName.isNotEmpty)
-        'dn=${Uri.encodeQueryComponent(displayName)}',
+      if (displayName.isNotEmpty) 'dn=${Uri.encodeQueryComponent(displayName)}',
     ];
     final seen = <String>{};
     for (final t in [...trackers, ..._kPublicTrackers]) {
@@ -304,6 +444,7 @@ class TorznabClient {
         }
       }
     }
+
     scan(item.findAllElements('torznab:attr'));
     scan(item.findAllElements('attr'));
     return out;
@@ -337,10 +478,12 @@ class TorznabClient {
       for (final f in filesEl.findElements('file')) {
         final n = f.getAttribute('name') ?? f.innerText.trim();
         if (n.isEmpty) continue;
-        out.add(TorrentFile(
-          name: n,
-          bytes: int.tryParse(f.getAttribute('size') ?? ''),
-        ));
+        out.add(
+          TorrentFile(
+            name: n,
+            bytes: int.tryParse(f.getAttribute('size') ?? ''),
+          ),
+        );
       }
       if (out.isNotEmpty) return out;
     }
@@ -351,8 +494,18 @@ class TorznabClient {
     // Minimal RFC 822 parser for "Tue, 05 May 2026 14:23:00 +0000".
     try {
       const months = {
-        'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
-        'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
+        'Jan': 1,
+        'Feb': 2,
+        'Mar': 3,
+        'Apr': 4,
+        'May': 5,
+        'Jun': 6,
+        'Jul': 7,
+        'Aug': 8,
+        'Sep': 9,
+        'Oct': 10,
+        'Nov': 11,
+        'Dec': 12,
       };
       final parts = input.split(RegExp(r'\s+'));
       if (parts.length < 6) return null;
@@ -399,6 +552,12 @@ class TorznabException implements Exception {
   String toString() => message;
 }
 
+/// Internal marker for failures worth retrying. Never escapes [search] —
+/// callers only ever see a plain [TorznabException].
+class _TransientTorznabException extends TorznabException {
+  const _TransientTorznabException(super.message);
+}
+
 /// One configured indexer as reported by Jackett's `/api/v2.0/indexers`.
 class JackettIndexer {
   const JackettIndexer({
@@ -414,9 +573,9 @@ class JackettIndexer {
   final String description;
 
   factory JackettIndexer.fromJson(Map<String, dynamic> json) => JackettIndexer(
-        id: (json['id'] ?? '').toString(),
-        name: (json['name'] ?? json['id'] ?? '').toString(),
-        type: (json['type'] ?? '').toString(),
-        description: (json['description'] ?? '').toString(),
-      );
+    id: (json['id'] ?? '').toString(),
+    name: (json['name'] ?? json['id'] ?? '').toString(),
+    type: (json['type'] ?? '').toString(),
+    description: (json['description'] ?? '').toString(),
+  );
 }
