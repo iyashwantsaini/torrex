@@ -211,25 +211,25 @@ class _FilterSheetState extends State<_FilterSheet> {
                 ),
                 const SizedBox(height: 16),
                 const WlmDivider(),
-                WlmSwitchTile(
+                _FilterSwitch(
                   title: 'Magnet links only',
                   subtitle: 'Hide results that only offer a .torrent file',
                   value: _f.magnetOnly,
                   onChanged: (v) => _update(_f.copyWith(magnetOnly: v)),
                 ),
-                WlmSwitchTile(
+                _FilterSwitch(
                   title: 'HDR / Dolby Vision only',
                   value: _f.hdrOnly,
                   onChanged: (v) => _update(_f.copyWith(hdrOnly: v)),
                 ),
-                WlmSwitchTile(
+                _FilterSwitch(
                   title: 'Merge duplicates',
                   subtitle:
                       'Collapse the same torrent reported by several indexers',
                   value: _f.dedupe,
                   onChanged: (v) => _update(_f.copyWith(dedupe: v)),
                 ),
-                WlmSwitchTile(
+                _FilterSwitch(
                   title: 'Safe mode',
                   subtitle: 'Hide adult (XXX) categories',
                   value: _f.excludeXxx,
@@ -332,4 +332,69 @@ class _FilterSheetState extends State<_FilterSheet> {
 
   static String _titleCase(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).toLowerCase();
+}
+
+/// Boolean option row for the sheet.
+///
+/// Deliberately **not** `WlmSwitchTile`: that widget nests a
+/// `SwitchListTile` inside `WlmCard`'s coloured `DecoratedBox`, which trips
+/// Flutter's "ListTile background color or ink splashes may be invisible"
+/// assertion on current stable (it fires in every debug build, not just
+/// tests). Composing the row by hand keeps the WolwoLoom look without
+/// putting a `ListTile` under a decorated ancestor at all, so there is
+/// nothing for that assertion to catch.
+class _FilterSwitch extends StatelessWidget {
+  const _FilterSwitch({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final sub = subtitle;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: WlmCard(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        onTap: () => onChanged(!value),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: theme.textTheme.titleSmall),
+                  if (sub != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      sub,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.outline,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Excluded from semantics because the whole card is already an
+            // activatable target — otherwise screen readers announce the
+            // option twice.
+            ExcludeSemantics(
+              child: Switch.adaptive(value: value, onChanged: onChanged),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -105,9 +105,9 @@ void main() {
                 child: TextButton(
                   onPressed: () => showFilterSheet(
                     context: context,
-                    current: const SearchFilters(resolutions: {
-                      Resolution.p2160,
-                    }),
+                    current: const SearchFilters(
+                      resolutions: {Resolution.p2160},
+                    ),
                     availableIndexers: const ['alpha'],
                     availableLanguages: const ['HINDI'],
                   ),
@@ -127,6 +127,90 @@ void main() {
       // Language and indexer sections only render when options were passed.
       expect(chip('Hindi'), findsOneWidget);
       expect(chip('alpha'), findsOneWidget);
+      // The boolean section is built at this height — that's the part that
+      // used to throw. Exact count is left loose because how many lazy rows
+      // fit depends on text metrics, which vary between Flutter versions.
+      expect(find.byType(Switch), findsAtLeastNWidgets(3));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('uses no ListTile under a decorated ancestor', (tester) async {
+      // Regression guard. `WlmSwitchTile` wraps a SwitchListTile in
+      // WlmCard's coloured DecoratedBox, which trips Flutter's "ListTile
+      // background color or ink splashes may be invisible" assertion on
+      // current stable — it broke CI while passing on an older local SDK.
+      // Asserting the structure catches a reintroduction on any version.
+      tester.view.physicalSize = const Size(400 * 3, 1600 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WlmTheme.dark(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => showFilterSheet(
+                    context: context,
+                    current: const SearchFilters(),
+                    availableIndexers: const ['alpha'],
+                    availableLanguages: const ['HINDI'],
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ListTile), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('toggling a boolean option updates the returned filters', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(400 * 3, 1600 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+
+      SearchFilters? result;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WlmTheme.dark(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () async {
+                    result = await showFilterSheet(
+                      context: context,
+                      current: const SearchFilters(),
+                      availableIndexers: const [],
+                      availableLanguages: const [],
+                    );
+                  },
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // The whole card is the tap target, not just the switch.
+      await tester.tap(find.text('Magnet links only'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('APPLY'));
+      await tester.pumpAndSettle();
+
+      expect(result?.magnetOnly, isTrue);
     });
   });
 
@@ -143,7 +227,8 @@ void main() {
         seeders: seeders,
         leechers: 12,
         publishDate: DateTime.now().subtract(const Duration(days: 2)),
-        magnetUri: 'magnet:?xt=urn:btih:'
+        magnetUri:
+            'magnet:?xt=urn:btih:'
             'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         downloadUrl: '',
         detailsUrl: '',
@@ -186,8 +271,9 @@ void main() {
       expect(find.text('+2 sources'), findsOneWidget);
     });
 
-    testWidgets('does not show a source badge for a single indexer',
-        (tester) async {
+    testWidgets('does not show a source badge for a single indexer', (
+      tester,
+    ) async {
       await pumpCard(tester, sample());
       expect(find.textContaining('source'), findsNothing);
     });

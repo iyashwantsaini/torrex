@@ -23,6 +23,30 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## App
 
+### [0.3.1] – 2026-08-09
+
+#### Fixed
+- **Filter sheet threw four framework assertions on current Flutter.**
+  `WlmSwitchTile` (wolwoloom 0.3.4) nests a `SwitchListTile` inside
+  `WlmCard`'s coloured `DecoratedBox`, which trips Flutter's *"ListTile
+  background color or ink splashes may be invisible"* assertion added in a
+  recent stable. It fires in **every debug build**, not just tests — so
+  opening Filters with `flutter run` on an up-to-date SDK produced a red
+  screen. The four toggles are now composed directly (card + row + switch,
+  no `ListTile`), keeping the same look with nothing for the assertion to
+  catch. Upgrading the design system does not help: wolwoloom 0.3.5/0.3.6
+  are documentation-only releases.
+
+  This is also why CI went red while the local suite stayed green — the
+  workflow tracks `channel: stable` while this machine is pinned to
+  3.41.9, which predates the assertion. The regression is now guarded by a
+  structural test (`find.byType(ListTile)` must find nothing in the sheet)
+  that fails on any SDK version.
+
+#### Added
+- Widget tests covering the boolean-option round-trip (tap the row, Apply,
+  read the returned filters) and the no-`ListTile` invariant.
+
 ### [0.3.0] – 2026-08-09
 
 #### Fixed
